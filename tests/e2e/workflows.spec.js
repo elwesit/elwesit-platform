@@ -2,7 +2,7 @@
 import { test, expect } from '@playwright/test';
 import sharp from 'sharp';
 
-const ADMIN = { email: 'admin@e2e.test', password: 'E2e-pass-123456' };
+const ADMIN = { email: process.env.E2E_EMAIL || 'admin@e2e.test', password: process.env.E2E_PASSWORD || 'E2e-pass-123456' };
 const rnd = () => Math.random().toString(36).slice(2, 7);
 
 const AUTH = 'tests/e2e/.auth.json';
