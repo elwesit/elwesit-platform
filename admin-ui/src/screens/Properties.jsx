@@ -1,0 +1,407 @@
+import React, { useMemo, useState, useEffect } from 'react';
+import { useTable, useRow, create, update, archive, call, api, storeSnapshot, useStore, getState } from '../data.js';
+import { Btn, Field, Input, NumInput, Select, Seg, Chips, Toggle, TextArea, Sheet, Section, Empty, KindTag, Pending, Icon, LinkBtn, useToast, Confirm } from '../ui.jsx';
+import { PersonPicker, GeoFields, PriceFields, NextStep, ContactActions, Timeline, Photos, InfoRow, SplitLayout, useSettings, loadLeaflet, tileLayer, pinIcon } from '../components.jsx';
+import MapPicker from '../MapPicker.jsx';
+import { TYPES, DEALS, AVAILABILITY, FEATURES, SENT_RESPONSE } from '@shared/vocab.js';
+import { geoLabel, price, ago, propertyTitle, personLabel, shareText, fmtDate, waUrl, primaryPhone, toDateInput, fromDateInput, fillTemplate, locLabel } from '../fmt.js';
+import { propertyDuplicates } from '@shared/search.js';
+import { matchRequestProperty, rankMatches, LEVEL_LABEL } from '@shared/matching.js';
+import { href, go, back } from '../router.js';
+import { norm, normLot } from '@shared/text.js';
+
+const STALE = 30;
+const verifiedAge = (p) => (p.verified_at ? Math.floor((Date.now() - Date.parse(p.verified_at)) / 86400000) : null);
+
+export default function Properties({ route, wide }) {
+  const id = route.parts[1];
+  const sub = route.parts[2];
+  if (id === 'new') return <PropertyForm onDone={(nid) => go('properties/' + nid)} />;
+  if (id && sub === 'edit') return <EditWrapper id={id} />;
+  return <SplitLayout wide={wide} hasDetail={!!id} list={<PropertyList route={route} selected={id} />} detail={id && <PropertyDetail id={id} tab={route.query.tab} />} />;
+}
+
+function EditWrapper({ id }) {
+  const p = useRow('properties', id);
+  if (!p) return <Empty title="غير موجود" />;
+  return <PropertyForm initial={p} onDone={() => go('properties/' + id)} />;
+}
+
+function PropertyList({ route, selected }) {
+  const props = useTable('properties');
+  const s = useStore();
+  const staleDays = s.settings?.stale_days || STALE;
+  const [q, setQ] = useState('');
+  const [f, setF] = useState({ deal: null, type: null, avail: null, pub: null, filter: route.query.filter || null, archived: false });
+  const list = useMemo(() => {
+    const nq = norm(q); const lot = normLot(q);
+    return props.filter((p) => {
+      if (!!p.archived_at !== f.archived) return false;
+      if (f.deal && p.deal !== f.deal) return false;
+      if (f.type && p.type !== f.type) return false;
+      if (f.avail && p.availability !== f.avail) return false;
+      if (f.pub === 'yes' && !p.published) return false;
+      if (f.pub === 'no' && p.published) return false;
+      if (f.filter === 'stale') { const a = verifiedAge(p); if (!(['available', 'unknown', 'reserved'].includes(p.availability) && (a == null || a > staleDays))) return false; }
+      if (nq && !(norm([p.ref, p.title, p.area_text, p.landmark, p.plan, p.sector, p.internal_notes, geoLabel(p)].join(' ')).includes(nq) || (lot && p.lot_norm === lot))) return false;
+      return true;
+    }).sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }, [props, q, f, staleDays]);
+  return <div className="page list-page">
+    <div className="page-head"><h1>العروض <small className="muted">({list.length})</small></h1><Btn kind="primary" icon="plus" onClick={() => go('properties/new')}>عرض جديد</Btn></div>
+    <div className="filters">
+      <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="بحث: مرجع، حي، رقم قطعة، ملاحظة" aria-label="بحث في العروض" />
+      <Select value={f.deal} onChange={(v) => setF({ ...f, deal: v })} placeholder="بيع وإيجار" options={Object.entries(DEALS)} />
+      <Select value={f.type} onChange={(v) => setF({ ...f, type: v })} placeholder="كل الأنواع" options={Object.entries(TYPES)} />
+      <Select value={f.avail} onChange={(v) => setF({ ...f, avail: v })} placeholder="كل الحالات" options={Object.entries(AVAILABILITY)} />
+      <Select value={f.pub} onChange={(v) => setF({ ...f, pub: v })} placeholder="منشور وغير منشور" options={[['yes', 'منشور'], ['no', 'غير منشور']]} />
+      <label className="inline-check"><input type="checkbox" checked={f.filter === 'stale'} onChange={(e) => setF({ ...f, filter: e.target.checked ? 'stale' : null })} /> يحتاج تحققاً</label>
+      <label className="inline-check"><input type="checkbox" checked={f.archived} onChange={(e) => setF({ ...f, archived: e.target.checked })} /> الأرشيف</label>
+    </div>
+    {!list.length && <Empty title="لا توجد عروض" action={<Btn kind="primary" onClick={() => go('properties/new')}>أضف عرضاً</Btn>}>أضف عرضاً من هنا أو من «إضافة سريعة».</Empty>}
+    <ul className="list">{list.map((p) => {
+      const age = verifiedAge(p);
+      return <li key={p.id}><a className={`list-item${selected === p.id ? ' on' : ''}`} href={href('properties/' + p.id)}>
+        <KindTag kind="offer" small />
+        <div className="li-body">
+          <div className="li-top"><b>{p.ref}</b> <span>{propertyTitle(p)}</span> <Pending row={p} /></div>
+          <small className="muted block">{[geoLabel(p), p.area_m2 ? `${p.area_m2} م²` : '', p.lot_number ? `قطعة ${p.lot_number}` : ''].filter(Boolean).join(' · ')}</small>
+          <div className="li-tags">
+            <span className="price-tag">{price(p.price_amount, p.price_currency, p.price_basis) || 'سعر غير معروف'}</span>
+            <span className={`tag av-${p.availability}`}>{AVAILABILITY[p.availability]}</span>
+            {p.published ? <span className="tag pub">منشور</span> : null}
+            <span className={`tag ${age == null || age > staleDays ? 'warn' : ''}`}>{age == null ? 'لم يُتحقق' : `تحقق ${ago(p.verified_at)}`}</span>
+          </div>
+        </div>
+      </a></li>;
+    })}</ul>
+  </div>;
+}
+
+function PropertyDetail({ id, tab }) {
+  const p = useRow('properties', id);
+  const sources = useTable('property_sources');
+  const settings = useSettings();
+  const toast = useToast();
+  const [showMap, setShowMap] = useState(false);
+  const [share, setShare] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  if (!p) return <Empty title="العرض غير موجود" />;
+  const age = verifiedAge(p);
+  const staleDays = settings.stale_days || STALE;
+  const srcs = sources.filter((s) => s.property_id === id && !s.archived_at);
+  return <div className="page detail">
+    <div className="detail-head">
+      <button className="icon-btn back-btn" onClick={() => back('properties')} aria-label="رجوع"><Icon name="back" /></button>
+      <div className="dh-title"><KindTag kind="offer" small /><h1>{p.ref} — {propertyTitle(p)}</h1><Pending row={p} /></div>
+      <div className="dh-actions">
+        <LinkBtn small icon="edit" href={href(`properties/${id}/edit`)}>تعديل</LinkBtn>
+        <Btn small icon="share" onClick={() => setShare(true)}>نص المشاركة</Btn>
+        {p.published ? <LinkBtn small icon="globe" href={`/p/${encodeURIComponent(p.ref)}`} target="_blank" rel="noopener">الصفحة العامة</LinkBtn> : null}
+        <Btn small kind="ghost" icon="archive" onClick={() => (p.archived_at ? archive('properties', id, false) : setConfirmArchive(true))}>{p.archived_at ? 'استعادة' : 'أرشفة'}</Btn>
+      </div>
+    </div>
+    <div className="status-strip">
+      <span className={`tag av-${p.availability}`}>{AVAILABILITY[p.availability]}</span>
+      <span className={`tag ${age == null || age > staleDays ? 'warn' : 'ok'}`}>{age == null ? 'لم يُسجَّل تحقق من التوفر والسعر' : `آخر تحقق ${ago(p.verified_at)} (${fmtDate(p.verified_at)})`}</span>
+      <Btn small icon="check" onClick={() => { update('properties', id, { verified_at: new Date().toISOString(), availability: p.availability === 'unknown' ? 'available' : p.availability }); toast('سُجّل التحقق اليوم'); }}>تحققت اليوم</Btn>
+      {p.published ? <span className="tag pub">منشور</span> : <span className="tag">غير منشور</span>}
+    </div>
+    <NextStep link={{ property_id: id }} defaultTitle={'تحقق من ' + p.ref} />
+    <div className="detail-grid">
+      <div>
+        <Section title="المعلومات">
+          <dl className="info">
+            <InfoRow label="العملية">{DEALS[p.deal]}</InfoRow>
+            <InfoRow label="النوع">{TYPES[p.type]}</InfoRow>
+            <InfoRow label="الموقع">{geoLabel(p) || '—'}</InfoRow>
+            <InfoRow label="معلم قريب">{p.landmark}</InfoRow>
+            <InfoRow label="وصف المكان">{p.location_desc}</InfoRow>
+            <InfoRow label="المساحة">{p.area_m2 != null ? `${p.area_m2} م²` : null}</InfoRow>
+            <InfoRow label="رقم القطعة">{p.lot_number ? <span className="lot">{p.lot_number}</span> : null}</InfoRow>
+            <InfoRow label="المخطط / القطاع">{[p.plan, p.sector && 'قطاع ' + p.sector].filter(Boolean).join(' · ')}</InfoRow>
+            <InfoRow label="الواجهة">{p.frontage}</InfoRow>
+            <InfoRow label="الغرف">{p.bedrooms}</InfoRow>
+            <InfoRow label="الحمامات">{p.bathrooms}</InfoRow>
+            <InfoRow label="الطوابق">{p.floors}</InfoRow>
+            <InfoRow label="المواصفات">{(p.features || []).map((f) => FEATURES[f]).join('، ')}</InfoRow>
+            <InfoRow label="السعر">{p.price_amount != null ? price(p.price_amount, p.price_currency, p.price_basis) : (p.price_raw ? null : 'غير معروف')}{p.price_raw ? <small className="muted"> (كما ورد: «{p.price_raw}»)</small> : null}{p.price_negotiable ? ' · قابل للتفاوض' : ''}</InfoRow>
+            <InfoRow label="شروط السعر">{p.price_terms}</InfoRow>
+            <InfoRow label="المالك">{p.owner_person_id ? <a href={href('people/' + p.owner_person_id)}>{personLabel(p.owner_person_id)}</a> : null}</InfoRow>
+            <InfoRow label="الوصف">{p.description}</InfoRow>
+          </dl>
+          {p.internal_notes && <div className="private-note"><b>ملاحظات خاصة (لا تُنشر):</b><p>{p.internal_notes}</p></div>}
+          {p.owner_person_id && <ContactActions personId={p.owner_person_id} link={{ property_id: id }} waText={fillTemplate('السلام عليكم، هل ما زال العقار ({title}) متوفراً؟ وهل السعر ما زال كما هو؟', { title: propertyTitle(p) })} />}
+        </Section>
+        <Section title="الموقع على الخريطة" actions={<Btn small icon="pin" onClick={() => setShowMap(true)}>{p.lat != null ? 'تعديل' : 'حدد الموقع'}</Btn>}>
+          {p.lat != null ? <MiniMap p={p} /> : <p className="muted">لا يوجد موقع على الخريطة. يمكن التسجيل والمتابعة بدونه.</p>}
+          {p.lat != null && <p className="hint">{p.location_precision === 'exact' ? 'موقع دقيق' : 'موقع تقريبي'} · أُدخل {({ pin: 'بعلامة على الخريطة', gps: 'من موقع الهاتف', coords: 'بالإحداثيات', link: 'من رابط' })[p.location_method] || ''} · <a href={`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`} target="_blank" rel="noopener">الاتجاهات</a></p>}
+          <Geometries property={p} />
+        </Section>
+        <Section title="الصور" collapsible>
+          <Photos ownerType="property" ownerId={id} />
+        </Section>
+        <Section title="الوثائق الخاصة" collapsible defaultOpen={false}>
+          <Photos ownerType="property" ownerId={id} kind="document" />
+        </Section>
+      </div>
+      <div>
+        <Sources property={p} sources={srcs} />
+        <PublishPanel p={p} />
+        <PropertyMatches p={p} open={tab === 'matches'} />
+        <SentList propertyId={id} />
+        <Section title="سجل التواصل والملاحظات" collapsible><Timeline link={{ property_id: id }} /></Section>
+      </div>
+    </div>
+    {showMap && <MapPicker value={p} onSave={(v) => update('properties', id, v)} onClose={() => setShowMap(false)} />}
+    {share && <ShareSheet p={p} onClose={() => setShare(false)} />}
+    {confirmArchive && <Confirm title="أرشفة العرض" message={p.published ? 'العرض منشور؛ ستُسحب صفحته العامة. يبقى السجل في الأرشيف ويمكن استعادته.' : 'يبقى السجل في الأرشيف ويمكن استعادته.'} onConfirm={() => archive('properties', id)} onClose={() => setConfirmArchive(false)} />}
+  </div>;
+}
+
+function MiniMap({ p }) {
+  const ref = React.useRef();
+  const settings = useSettings();
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    if (!on) return;
+    let map;
+    loadLeaflet().then((L) => {
+      map = L.map(ref.current, { scrollWheelZoom: false }).setView([p.lat, p.lng], 16);
+      tileLayer(L, settings).addTo(map); map.attributionControl.setPrefix(false);
+      L.marker([p.lat, p.lng], { icon: pinIcon(L) }).addTo(map);
+    });
+    return () => map?.remove();
+  }, [on, p.lat, p.lng]); // eslint-disable-line
+  return <div ref={ref} className="map map-mini">{!on && <button className="btn btn-default" onClick={() => setOn(true)}>اعرض الخريطة</button>}</div>;
+}
+
+// ---------- مصادر العرض ----------
+function Sources({ property, sources }) {
+  const [edit, setEdit] = useState(null);
+  return <Section title="مصادر العرض" count={sources.length} actions={<Btn small icon="plus" onClick={() => setEdit({ relation: 'broker', price_currency: 'unknown', price_basis: 'total' })}>مصدر</Btn>}>
+    <p className="hint">من أين وصلك العرض. لا يظهر أي مصدر للجمهور ولا لمصدر آخر.</p>
+    {!sources.length && <p className="muted small">لا يوجد مصدر مسجل.</p>}
+    <ul className="sources">{sources.map((s) => <li key={s.id}>
+      <div><b>{s.person_id ? <a href={href('people/' + s.person_id)}>{personLabel(s.person_id)}</a> : 'مصدر بدون اسم'}</b> <span className="tag">{({ owner: 'المالك', broker: 'وسيط', relative: 'قريب المالك', other: 'أخرى' })[s.relation]}</span> {s.channel && <small className="muted">عبر {s.channel}</small>}</div>
+      <div className="small">{s.price_amount != null ? price(s.price_amount, s.price_currency, s.price_basis) : s.price_raw || 'بدون سعر'}{s.commission_terms && <> · العمولة: {s.commission_terms}</>}</div>
+      {s.conditions && <div className="small muted">الشروط: {s.conditions}</div>}
+      <div className="small"><span className={!s.verified_at || (Date.now() - Date.parse(s.verified_at)) / 86400000 > STALE ? 'warn-text' : 'muted'}>{s.verified_at ? `تحقق ${ago(s.verified_at)}` : 'لم يُتحقق'}</span></div>
+      <div className="row-actions">
+        {s.person_id && <ContactActions personId={s.person_id} compact link={{ property_id: property.id }} />}
+        <Btn small onClick={() => update('property_sources', s.id, { verified_at: new Date().toISOString() })}>تحققت اليوم</Btn>
+        <Btn small kind="ghost" icon="edit" onClick={() => setEdit(s)} aria-label="تعديل" />
+      </div>
+    </li>)}</ul>
+    {edit && <SourceSheet property={property} source={edit} onClose={() => setEdit(null)} />}
+  </Section>;
+}
+
+function SourceSheet({ property, source, onClose }) {
+  const [s, setS] = useState({ ...source });
+  const set = (p) => setS({ ...s, ...p });
+  const save = () => {
+    const body = { person_id: s.person_id, relation: s.relation, channel: s.channel || '', price_raw: s.price_raw || '', price_amount: s.price_amount ?? null, price_currency: s.price_currency, price_basis: s.price_basis, commission_terms: s.commission_terms || '', conditions: s.conditions || '', verified_at: s.verified_at || null, notes: s.notes || '' };
+    if (source.id) update('property_sources', source.id, body); else create('property_sources', { ...body, property_id: property.id });
+    onClose();
+  };
+  return <Sheet title={source.id ? 'تعديل المصدر' : 'مصدر جديد'} onClose={onClose} footer={<>{source.id && <Btn kind="ghost" onClick={() => { archive('property_sources', source.id); onClose(); }}>حذف</Btn>}<Btn onClick={onClose}>إلغاء</Btn><Btn kind="primary" onClick={save}>حفظ</Btn></>}>
+    <PersonPicker value={s.person_id} onChange={(v) => set({ person_id: v })} label="الشخص (المالك أو الوسيط)" roles={[s.relation === 'owner' ? 'owner' : 'broker']} />
+    <Field label="صفته"><Seg value={s.relation} onChange={(v) => set({ relation: v })} options={[['owner', 'المالك'], ['broker', 'وسيط'], ['relative', 'قريب المالك'], ['other', 'أخرى']]} /></Field>
+    <Field label="وسيلة التواصل"><Input value={s.channel} onChange={(v) => set({ channel: v })} placeholder="اتصال، واتساب، لقاء…" /></Field>
+    <PriceFields value={s} onChange={set} label="سعره" />
+    <Field label="العمولة المتفق عليها معه"><Input value={s.commission_terms} onChange={(v) => set({ commission_terms: v })} placeholder="مثلاً: مناصفة، أو مبلغ محدد" /></Field>
+    <Field label="شروطه"><Input value={s.conditions} onChange={(v) => set({ conditions: v })} /></Field>
+    <Field label="تاريخ التحقق"><input type="date" value={toDateInput(s.verified_at)} onChange={(e) => set({ verified_at: fromDateInput(e.target.value) })} /></Field>
+    <Field label="ملاحظات"><TextArea value={s.notes} onChange={(v) => set({ notes: v })} rows={2} /></Field>
+  </Sheet>;
+}
+
+// ---------- الحدود: مرسومة يدوياً أو مستوردة من مصدر موثق ----------
+function Geometries({ property }) {
+  const geoms = useTable('geometries').filter((g) => g.property_id === property.id && !g.archived_at);
+  const [adding, setAdding] = useState(false);
+  return <div className="geoms">
+    {geoms.map((g) => <div key={g.id} className="geom-item"><span className={`tag ${g.method === 'imported' ? 'ok' : ''}`}>{g.method === 'imported' ? 'حدود مستوردة' : 'حدود رسمتها بنفسي'}</span> {g.source_name && <small>المصدر: {g.source_name}{g.source_license ? ` (${g.source_license})` : ''}</small>} {g.verified ? <span className="tag ok">موثق</span> : <span className="tag warn">غير موثق</span>} <button className="linklike" onClick={() => archive('geometries', g.id)}>حذف</button></div>)}
+    <button className="linklike" onClick={() => setAdding(true)}>+ إرفاق حدود القطعة (GeoJSON)</button>
+    {adding && <GeometrySheet property={property} onClose={() => setAdding(false)} />}
+  </div>;
+}
+function GeometrySheet({ property, onClose }) {
+  const [g, setG] = useState({ method: 'imported', source_name: '', source_license: '', verified: false, geojson: '', lot_number: property.lot_number, plan: property.plan, sector: property.sector });
+  const [err, setErr] = useState('');
+  const save = () => {
+    try { const j = JSON.parse(g.geojson); if (!j.type) throw 0; } catch { setErr('ملف GeoJSON غير صالح'); return; }
+    if (g.method === 'imported' && !g.source_name.trim()) { setErr('اذكر مصدر البيانات المستوردة'); return; }
+    create('geometries', { ...g, verified: g.method === 'imported' && g.verified ? 1 : 0, property_id: property.id });
+    onClose();
+  };
+  return <Sheet title="حدود القطعة" onClose={onClose} footer={<><Btn onClick={onClose}>إلغاء</Btn><Btn kind="primary" onClick={save}>حفظ</Btn></>}>
+    <p className="hint">لا تُرفق إلا بيانات لديك حق استخدامها. الحدود المرسومة يدوياً لا تُعرض للجمهور كحدود موثقة.</p>
+    <Field label="النوع"><Seg value={g.method} onChange={(v) => setG({ ...g, method: v })} options={[['imported', 'مستوردة من مصدر'], ['manual', 'رسمتها بنفسي']]} /></Field>
+    {g.method === 'imported' && <><Field label="اسم المصدر"><Input value={g.source_name} onChange={(v) => setG({ ...g, source_name: v })} placeholder="مثلاً: مخطط رسمي من..." /></Field>
+      <Field label="الترخيص / إذن الاستخدام"><Input value={g.source_license} onChange={(v) => setG({ ...g, source_license: v })} /></Field>
+      <Field label="تاريخ البيانات"><input type="date" onChange={(e) => setG({ ...g, source_date: fromDateInput(e.target.value) })} /></Field>
+      <Toggle checked={g.verified} onChange={(v) => setG({ ...g, verified: v })} label="بيانات موثقة ومسموح بنشرها" /></>}
+    <Field label="ملف GeoJSON"><input type="file" accept=".geojson,.json,application/geo+json" onChange={async (e) => { const f = e.target.files[0]; if (f) setG({ ...g, geojson: await f.text() }); }} /></Field>
+    <Field label="أو الصق النص"><TextArea value={g.geojson} onChange={(v) => setG({ ...g, geojson: v })} rows={4} dir="ltr" /></Field>
+    {err && <p className="form-msg err">{err}</p>}
+  </Sheet>;
+}
+
+// ---------- النشر ----------
+function PublishPanel({ p }) {
+  const files = useTable('files').filter((f) => f.owner_type === 'property' && f.owner_id === p.id && f.kind === 'photo' && !f.archived_at && !f._pending);
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [problems, setProblems] = useState(null);
+  const s = useStore();
+  const set = (patch) => update('properties', p.id, patch);
+  const sel = p.pub_photo_ids || [];
+  const problemsLocal = [];
+  if (!p.deal) problemsLocal.push('حدد: بيع أم إيجار');
+  if (!p.type) problemsLocal.push('حدد نوع العقار');
+  if (!p.wilaya_code && !p.moughataa_code) problemsLocal.push('حدد الولاية أو المقاطعة على الأقل');
+  if (['sold', 'rented', 'withdrawn'].includes(p.availability)) problemsLocal.push('العقار غير متوفر');
+  const doPublish = async () => {
+    if (!s.online) { toast('النشر يحتاج اتصالاً', 'err'); return; }
+    setBusy(true); setProblems(null);
+    if (!p.published && !sel.length && files.length) set({ pub_photo_ids: files.map((f) => f.id) });
+    const r = await call('POST', `/properties/${p.id}/publish`, {}, 'نشر');
+    setBusy(false);
+    if (r.ok) toast(r.data.warnings?.length ? 'نُشر. ' + r.data.warnings.join(' — ') : 'نُشر العرض'); else setProblems(r.data?.problems || [r.data?.message || 'تعذر النشر']);
+  };
+  const doUnpublish = async () => { setBusy(true); const r = await call('POST', `/properties/${p.id}/unpublish`, {}, 'سحب النشر'); setBusy(false); if (r.ok) toast('سُحب من الموقع العام'); };
+  return <Section title="النشر على الموقع" collapsible defaultOpen={!!p.published}>
+    <p className="hint">اختر ما يراه الزوار. لا يُنشر أبداً: المالك، المصادر، الملاحظات الخاصة، الوثائق، العمولات.</p>
+    <Field label="عنوان الإعلان"><Input value={p.pub_title} onChange={(v) => set({ pub_title: v })} placeholder={propertyTitle(p)} /></Field>
+    <Field label="وصف الإعلان" hint="إذا تُرك فارغاً يُستعمل «الوصف» من بيانات العرض"><TextArea value={p.pub_description} onChange={(v) => set({ pub_description: v })} rows={3} /></Field>
+    <Toggle checked={p.pub_show_price} onChange={(v) => set({ pub_show_price: v })} label="إظهار السعر" hint={p.price_currency === 'unknown' && p.price_amount != null ? 'العملة غير مؤكدة: سيظهر «السعر عند التواصل»' : 'وإلا يظهر «السعر عند التواصل»'} />
+    <Toggle checked={p.pub_show_lot} onChange={(v) => set({ pub_show_lot: v })} label="إظهار رقم القطعة" />
+    <Toggle checked={p.pub_show_plan} onChange={(v) => set({ pub_show_plan: v })} label="إظهار المخطط والقطاع" />
+    <Toggle checked={p.pub_show_landmark} onChange={(v) => set({ pub_show_landmark: v })} label="إظهار المعلم القريب" />
+    <Field label="الموقع للجمهور"><Seg value={p.pub_location} onChange={(v) => set({ pub_location: v })} options={[['approximate', 'تقريبي'], ['exact', 'دقيق'], ['hidden', 'مخفي']]} /></Field>
+    {p.pub_location === 'exact' && <Toggle checked={p.pub_show_boundary} onChange={(v) => set({ pub_show_boundary: v })} label="إظهار الحدود الموثقة إن وجدت" />}
+    {files.length > 0 && <><p className="field-label">الصور المنشورة ({sel.length} من {files.length})</p><Photos ownerType="property" ownerId={p.id} selectable selected={sel} onSelect={(ids) => set({ pub_photo_ids: ids })} /></>}
+    {problemsLocal.length > 0 && <div className="warn-box"><b>قبل النشر:</b><ul>{problemsLocal.map((x) => <li key={x}>{x}</li>)}</ul></div>}
+    {problems && <div className="warn-box">{problems.map((x) => <div key={x}>{x}</div>)}</div>}
+    <div className="row-actions">
+      {p.published ? <><Btn kind="danger" disabled={busy} onClick={doUnpublish}>سحب النشر</Btn><LinkBtn icon="globe" href={`/p/${encodeURIComponent(p.ref)}`} target="_blank" rel="noopener">الصفحة العامة</LinkBtn></> : <Btn kind="primary" disabled={busy || problemsLocal.length > 0} onClick={doPublish}>{busy ? 'جارٍ…' : 'انشر على الموقع'}</Btn>}
+    </div>
+    {p.published ? <p className="hint">التعديلات المحفوظة تُحدّث الصفحة العامة تلقائياً. إذا أصبح العقار «بيع/أُجّر/سُحب» يُسحب نشره تلقائياً.</p> : null}
+  </Section>;
+}
+
+// ---------- المطابقة من جهة العرض ----------
+function PropertyMatches({ p, open }) {
+  const s = useStore();
+  const reqs = useTable('requests');
+  const staleDays = s.settings?.stale_days || STALE;
+  const list = useMemo(() => rankMatches(reqs.filter((r) => !r.archived_at && ['new', 'active'].includes(r.status)).map((r) => ({ r, match: matchRequestProperty(r, p, { staleDays }) })).filter((x) => x.match)), [reqs, p, staleDays]);
+  return <Section title="طلبات قد تناسب هذا العرض" count={list.length} collapsible defaultOpen={open || list.length > 0}>
+    {!list.length && <p className="muted small">لا توجد طلبات جارية مناسبة.</p>}
+    <ul className="matches">{list.map(({ r, match }) => <li key={r.id} className={`match ${match.level}`}>
+      <div><span className={`level ${match.level}`}>{LEVEL_LABEL[match.level]}</span> <a href={href('requests/' + r.id)}>طلب {r.ref} — {personLabel(r.person_id) || 'بدون اسم'}</a></div>
+      <MatchReasons match={match} />
+    </li>)}</ul>
+  </Section>;
+}
+
+export function MatchReasons({ match }) {
+  return <div className="reasons">
+    {match.reasons.length > 0 && <div className="r-ok"><b>✓ يتوافق:</b> {match.reasons.join('، ')}</div>}
+    {match.diffs.length > 0 && <div className="r-diff"><b>≠ يختلف:</b> {match.diffs.join('، ')}</div>}
+    {match.missing.length > 0 && <div className="r-miss"><b>? ناقص:</b> {match.missing.join('، ')}</div>}
+  </div>;
+}
+
+function SentList({ propertyId }) {
+  const sent = useTable('sent_offers').filter((s) => s.property_id === propertyId && !s.archived_at);
+  if (!sent.length) return null;
+  return <Section title="أُرسل إلى" count={sent.length} collapsible>
+    <ul className="plain">{sent.map((s) => <li key={s.id}><a href={href('people/' + s.person_id)}>{personLabel(s.person_id)}</a> · {fmtDate(s.sent_at)} · <b>{SENT_RESPONSE[s.response]}</b></li>)}</ul>
+  </Section>;
+}
+
+function ShareSheet({ p, onClose }) {
+  const settings = useSettings();
+  const tpls = useTable('templates').filter((t) => !t.archived_at && t.kind === 'property');
+  const [tpl, setTpl] = useState(tpls[0]?.id);
+  const text = shareText(p, settings, tpls.find((t) => t.id === tpl)?.body);
+  const toast = useToast();
+  return <Sheet title="نص المشاركة" onClose={onClose} footer={<><Btn onClick={async () => { try { await navigator.clipboard.writeText(text); toast('نُسخ النص'); } catch { toast('انسخ النص يدوياً', 'err'); } }}>نسخ</Btn><LinkBtn kind="wa" icon="wa" href={`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noopener">مشاركة عبر واتساب</LinkBtn></>}>
+    {tpls.length > 1 && <Field label="القالب"><Select value={tpl} onChange={setTpl} options={tpls.map((t) => [t.id, t.title])} /></Field>}
+    <pre className="share-preview">{text}</pre>
+    <p className="hint">النص يحترم خيارات النشر: السعر ورقم القطعة والمعلم تظهر فقط إن سمحت بها، ولا يتضمن المالك أو المصدر أو ملاحظاتك.{!p.published && ' العرض غير منشور، لذا لا يوجد رابط.'}</p>
+  </Sheet>;
+}
+
+// ---------- نموذج الإضافة/التعديل ----------
+export function PropertyForm({ initial, onDone }) {
+  const isNew = !initial;
+  const [v, setV] = useState(() => initial ? { ...initial } : { deal: null, type: null, availability: 'available', price_currency: 'unknown', price_basis: 'total', features: [], pub_location: 'approximate', pub_show_price: 1, pub_show_plan: 1, pub_show_landmark: 1, verified_at: new Date().toISOString(), location_precision: 'none' });
+  const [showMap, setShowMap] = useState(false);
+  const [owner, setOwner] = useState(initial?.owner_person_id || null);
+  const set = (p) => setV((x) => ({ ...x, ...p }));
+  const dups = useMemo(() => (v.lot_number || v.lat != null) ? propertyDuplicates(storeSnapshot(), { lot_number: v.lot_number, plan: v.plan, sector: v.sector, moughataa_code: v.moughataa_code, lat: v.lat, lng: v.lng, type: v.type, excludeId: initial?.id }) : [], [v.lot_number, v.plan, v.sector, v.moughataa_code, v.lat, v.lng, v.type]);
+  const FIELDS = ['deal', 'type', 'title', 'description', 'wilaya_code', 'moughataa_code', 'area_id', 'area_text', 'landmark', 'location_desc', 'lat', 'lng', 'location_method', 'location_precision', 'plan', 'sector', 'lot_number', 'area_m2', 'frontage', 'bedrooms', 'bathrooms', 'floors', 'features', 'price_raw', 'price_amount', 'price_currency', 'price_basis', 'price_negotiable', 'price_terms', 'availability', 'verified_at', 'internal_notes', 'pub_location', 'pub_show_price', 'pub_show_plan', 'pub_show_landmark'];
+  const save = () => {
+    const body = { owner_person_id: owner };
+    for (const k of FIELDS) if (isNew ? v[k] !== undefined : JSON.stringify(v[k]) !== JSON.stringify(initial[k])) body[k] = v[k];
+    if (isNew) {
+      const id = create('properties', body);
+      if (owner) create('property_sources', { property_id: id, person_id: owner, relation: 'owner', price_raw: v.price_raw || '', price_amount: v.price_amount ?? null, price_currency: v.price_currency, price_basis: v.price_basis, verified_at: v.verified_at });
+      onDone(id);
+    } else {
+      if (owner === initial.owner_person_id) delete body.owner_person_id;
+      if (Object.keys(body).length) update('properties', initial.id, body);
+      onDone(initial.id);
+    }
+  };
+  const isLand = v.type === 'land' || v.type === 'farm';
+  return <div className="page form-page">
+    <div className="page-head"><h1>{isNew ? 'عرض جديد' : `تعديل ${initial.ref}`}</h1></div>
+    <p className="hint">الحقول كلها اختيارية ما عدا ما تحتاجه لاحقاً للنشر. سجّل ما تعرفه الآن وأكمل لاحقاً.</p>
+    <fieldset className="fieldset"><legend>الأساسيات</legend>
+      <Field label="العملية"><Seg value={v.deal} onChange={(x) => set({ deal: x })} options={Object.entries(DEALS)} allowNone /></Field>
+      <Field label="النوع"><div className="chips">{Object.entries(TYPES).map(([k, l]) => <button type="button" key={k} className={v.type === k ? 'chip on' : 'chip'} aria-pressed={v.type === k} onClick={() => set({ type: v.type === k ? null : k })}>{l}</button>)}</div></Field>
+      <Field label="عنوان داخلي (اختياري)"><Input value={v.title} onChange={(x) => set({ title: x })} placeholder={propertyTitle(v)} /></Field>
+      <div className="grid2">
+        <Field label="التوفر"><Select value={v.availability} onChange={(x) => set({ availability: x || 'unknown' })} options={Object.entries(AVAILABILITY)} /></Field>
+        <Field label="آخر تحقق من التوفر والسعر"><input type="date" value={toDateInput(v.verified_at)} onChange={(e) => set({ verified_at: fromDateInput(e.target.value) })} /></Field>
+      </div>
+    </fieldset>
+    <fieldset className="fieldset"><legend>الموقع</legend>
+      <GeoFields value={v} onChange={set} />
+      <div className="grid2">
+        <Field label="معلم قريب"><Input value={v.landmark} onChange={(x) => set({ landmark: x })} placeholder="مثلاً: قرب كارفور مدريد" /></Field>
+        <Field label="وصف المكان"><Input value={v.location_desc} onChange={(x) => set({ location_desc: x })} placeholder="الشارع الثاني بعد المسجد…" /></Field>
+      </div>
+      <div className="row-actions"><Btn icon="pin" onClick={() => setShowMap(true)}>{v.lat != null ? `الموقع: ${v.lat.toFixed(5)}, ${v.lng.toFixed(5)} (${v.location_precision === 'exact' ? 'دقيق' : 'تقريبي'})` : 'حدد على الخريطة (اختياري)'}</Btn></div>
+    </fieldset>
+    <fieldset className="fieldset"><legend>{isLand ? 'القطعة والمساحة' : 'المساحة والمواصفات'}</legend>
+      <div className="grid3">
+        <Field label="المساحة (م²)"><NumInput value={v.area_m2} onChange={(x) => set({ area_m2: x })} /></Field>
+        <Field label="رقم القطعة (النمرة)"><Input value={v.lot_number} onChange={(x) => set({ lot_number: x })} dir="auto" /></Field>
+        <Field label="المخطط"><Input value={v.plan} onChange={(x) => set({ plan: x })} /></Field>
+        <Field label="القطاع"><Input value={v.sector} onChange={(x) => set({ sector: x })} /></Field>
+        <Field label="الواجهة / الأبعاد"><Input value={v.frontage} onChange={(x) => set({ frontage: x })} placeholder="مثلاً 20×30" /></Field>
+        {!isLand && <><Field label="الغرف"><NumInput value={v.bedrooms} onChange={(x) => set({ bedrooms: x })} /></Field>
+          <Field label="الحمامات"><NumInput value={v.bathrooms} onChange={(x) => set({ bathrooms: x })} /></Field>
+          <Field label="الطوابق"><NumInput value={v.floors} onChange={(x) => set({ floors: x })} /></Field></>}
+      </div>
+      <Field label="مواصفات"><Chips value={v.features} onChange={(x) => set({ features: x })} options={Object.entries(FEATURES)} /></Field>
+      {dups.length > 0 && <div className="warn-box"><b>تنبيه تكرار محتمل:</b><ul>{dups.map((d) => <li key={d.id}>{d.reason}: <a href={href('properties/' + d.id)} target="_blank" rel="noopener">{d.ref}</a></li>)}</ul><small>إن كان العقار نفسه من مصدر آخر، أضفه «مصدراً» للعرض الموجود بدل إنشاء عرض جديد.</small></div>}
+    </fieldset>
+    <PriceFields value={v} onChange={set} />
+    <Toggle checked={v.price_negotiable} onChange={(x) => set({ price_negotiable: x })} label="قابل للتفاوض" />
+    <Field label="شروط السعر"><Input value={v.price_terms} onChange={(x) => set({ price_terms: x })} placeholder="مثلاً: دفعة أولى، أقساط…" /></Field>
+    <fieldset className="fieldset"><legend>المالك والملاحظات</legend>
+      <PersonPicker value={owner} onChange={setOwner} label="المالك (إن عُرف)" roles={['owner', 'seller']} />
+      <Field label="الوصف (يمكن نشره)"><TextArea value={v.description} onChange={(x) => set({ description: x })} rows={3} /></Field>
+      <Field label="ملاحظات خاصة (لا تُنشر أبداً)"><TextArea value={v.internal_notes} onChange={(x) => set({ internal_notes: x })} rows={3} /></Field>
+    </fieldset>
+    <div className="form-actions sticky"><Btn onClick={() => back('properties')}>إلغاء</Btn><Btn kind="primary" onClick={save}>حفظ</Btn></div>
+    {showMap && <MapPicker value={v} onSave={set} onClose={() => setShowMap(false)} />}
+  </div>;
+}

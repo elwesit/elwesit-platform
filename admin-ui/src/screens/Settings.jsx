@@ -1,0 +1,160 @@
+import React, { useEffect, useState } from 'react';
+import { useStore, saveSettings, useTable, create, update, archive, api, logout, loadSettings } from '../data.js';
+import { Btn, Field, Input, NumInput, TextArea, Section, Seg, Select, useToast, Sheet, LinkBtn, Icon } from '../ui.jsx';
+import { href } from '../router.js';
+import { fmtDateTime } from '../fmt.js';
+
+export default function Settings() {
+  const s = useStore();
+  const [tab, setTab] = useState('site');
+  useEffect(() => { loadSettings(); }, []);
+  return <div className="page settings">
+    <div className="page-head"><h1>الإعدادات</h1></div>
+    <Seg value={tab} onChange={setTab} options={[['site', 'الموقع والتواصل'], ['templates', 'القوالب'], ['areas', 'الأحياء'], ['data', 'البيانات'], ['account', 'الحساب'], ['integrations', 'واتساب']]} />
+    {tab === 'site' && (s.settings ? <SiteSettings settings={s.settings} /> : <p className="muted">الإعدادات تحتاج اتصالاً للتحميل.</p>)}
+    {tab === 'templates' && <Templates />}
+    {tab === 'areas' && <Areas />}
+    {tab === 'data' && <DataTools />}
+    {tab === 'account' && <Account />}
+    {tab === 'integrations' && <WhatsApp />}
+  </div>;
+}
+
+function SiteSettings({ settings }) {
+  const [v, setV] = useState(settings);
+  const toast = useToast();
+  const set = (k) => (x) => setV({ ...v, [k]: x });
+  const save = async () => { const r = await saveSettings(v); toast(r.ok ? 'حُفظت الإعدادات وطُبقت على الموقع العام' : r.data?.message || 'تعذر الحفظ', r.ok ? 'info' : 'err'); };
+  return <>
+    <Section title="هوية الموقع">
+      <Field label="اسم الموقع"><Input value={v.site_name} onChange={set('site_name')} /></Field>
+      <Field label="الشعار النصي"><Input value={v.site_tagline} onChange={set('site_tagline')} /></Field>
+      <Field label="نص الترحيب"><TextArea value={v.site_intro} onChange={set('site_intro')} rows={2} /></Field>
+      <Field label="الاسم القانوني للنشاط (في صفحات الخصوصية والشروط)"><Input value={v.business_name_legal} onChange={set('business_name_legal')} /></Field>
+      <Field label="الرابط العام للموقع" hint="مثلاً https://example.mr — يُستعمل في روابط المشاركة ومعاينات واتساب"><Input value={v.base_url} onChange={set('base_url')} dir="ltr" /></Field>
+    </Section>
+    <Section title="التواصل (يظهر للزوار)">
+      <div className="grid2">
+        <Field label="هاتف الاتصال"><Input value={v.contact_phone} onChange={set('contact_phone')} dir="ltr" type="tel" /></Field>
+        <Field label="رقم واتساب"><Input value={v.contact_whatsapp} onChange={set('contact_whatsapp')} dir="ltr" type="tel" /></Field>
+        <Field label="البريد"><Input value={v.contact_email} onChange={set('contact_email')} dir="ltr" /></Field>
+        <Field label="العنوان"><Input value={v.office_address} onChange={set('office_address')} /></Field>
+        <Field label="أوقات العمل"><Input value={v.office_hours} onChange={set('office_hours')} /></Field>
+      </div>
+    </Section>
+    <Section title="العمل">
+      <div className="grid2">
+        <Field label="تنبيه العروض غير المحدثة بعد (يوم)"><NumInput value={v.stale_days} onChange={set('stale_days')} /></Field>
+        <Field label="نصف قطر الموقع التقريبي (متر)"><NumInput value={v.approx_radius_m} onChange={set('approx_radius_m')} /></Field>
+        <Field label="عدد العقارات في الصفحة الأولى"><NumInput value={v.listing_page_size} onChange={set('listing_page_size')} /></Field>
+      </div>
+    </Section>
+    <Section title="الخرائط" collapsible defaultOpen={false}>
+      <p className="hint">الافتراضي: OpenStreetMap مع النسب المطلوب. خوادم OSM العامة للاستخدام الخفيف فقط؛ عند ازدياد الزوار استخدم مزود خرائط بترخيص مناسب وضع رابطه هنا.</p>
+      <Field label="رابط البلاطات"><Input value={v.map_tiles_url} onChange={set('map_tiles_url')} dir="ltr" /></Field>
+      <Field label="النسب (Attribution)"><Input value={v.map_tiles_attribution} onChange={set('map_tiles_attribution')} dir="ltr" /></Field>
+    </Section>
+    <Section title="نصوص إضافية للصفحات القانونية" collapsible defaultOpen={false}>
+      <Field label="إضافة لصفحة الخصوصية"><TextArea value={v.privacy_extra} onChange={set('privacy_extra')} rows={3} /></Field>
+      <Field label="إضافة لصفحة الشروط"><TextArea value={v.terms_extra} onChange={set('terms_extra')} rows={3} /></Field>
+    </Section>
+    <div className="form-actions sticky"><Btn kind="primary" onClick={save}>حفظ الإعدادات</Btn></div>
+  </>;
+}
+
+function Templates() {
+  const tpls = useTable('templates').filter((t) => !t.archived_at).sort((a, b) => a.sort - b.sort);
+  const [edit, setEdit] = useState(null);
+  return <Section title="قوالب الرسائل" actions={<Btn small icon="plus" onClick={() => setEdit({ kind: 'other', title: '', body: '' })}>قالب</Btn>}>
+    <p className="hint">المتغيرات المتاحة: {'{name}'} الاسم، {'{title}'} العنوان، {'{place}'} المكان، {'{price}'} السعر، {'{area}'} المساحة، {'{ref}'} المرجع، {'{link}'} الرابط، {'{deal_label}'}، {'{site_name}'}. قالب «تسويق عقار» يُستعمل في نص المشاركة.</p>
+    <ul className="plain">{tpls.map((t) => <li key={t.id} className="tpl"><b>{t.title}</b> <small className="muted">({t.kind})</small><pre className="share-preview small">{t.body}</pre><Btn small icon="edit" onClick={() => setEdit(t)}>تعديل</Btn></li>)}</ul>
+    {edit && <Sheet title="قالب" onClose={() => setEdit(null)} footer={<>{edit.id && <Btn kind="ghost" onClick={() => { archive('templates', edit.id); setEdit(null); }}>حذف</Btn>}<Btn kind="primary" onClick={() => { if (edit.id) update('templates', edit.id, { title: edit.title, body: edit.body, kind: edit.kind }); else create('templates', edit); setEdit(null); }}>حفظ</Btn></>}>
+      <Field label="العنوان"><Input value={edit.title} onChange={(x) => setEdit({ ...edit, title: x })} /></Field>
+      <Field label="الاستعمال"><Select value={edit.kind} onChange={(x) => setEdit({ ...edit, kind: x || 'other' })} options={[['buyer', 'أسئلة المشتري'], ['seller', 'أسئلة البائع'], ['followup', 'متابعة'], ['property', 'تسويق عقار'], ['verify', 'تحقق من عرض'], ['other', 'أخرى']]} /></Field>
+      <Field label="النص"><TextArea value={edit.body} onChange={(x) => setEdit({ ...edit, body: x })} rows={7} /></Field>
+    </Sheet>}
+  </Section>;
+}
+
+function Areas() {
+  const areas = useTable('areas').filter((a) => !a.archived_at).sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+  const moughataas = useTable('moughataas');
+  const wilayas = useTable('wilayas');
+  const [edit, setEdit] = useState(null);
+  return <Section title="الأحياء والمعالم والمخططات" actions={<Btn small icon="plus" onClick={() => setEdit({ name: '', aliases: [], kind: 'area' })}>إضافة</Btn>}>
+    <p className="hint">أضف أسماء السوق كما تُستعمل، مع الكتابات البديلة (عربية وفرنسية). حدّد المقاطعة فقط إن كنت متأكداً؛ يمكن تركها فارغة. تُستعمل هذه القائمة في الإدخال والبحث والمطابقة والالتقاط.</p>
+    <p className="hint">التقسيم الإداري (15 ولاية و63 مقاطعة) مصدره قائمة المقاطعات المحدثة 2023 ومرسوم 8 سبتمبر 2021. يُنصح بمطابقته مع المصادر الرسمية.</p>
+    <table className="table"><thead><tr><th>الاسم</th><th>أسماء بديلة</th><th>النوع</th><th>المقاطعة</th><th></th></tr></thead>
+      <tbody>{areas.map((a) => <tr key={a.id}><td>{a.name}</td><td>{(a.aliases || []).join('، ')}</td><td>{({ area: 'حي', landmark: 'معلم', plan: 'مخطط' })[a.kind]}</td><td>{moughataas.find((m) => m.code === a.moughataa_code)?.name_ar || <span className="muted">غير محددة</span>}</td><td><Btn small kind="ghost" icon="edit" onClick={() => setEdit(a)} aria-label="تعديل" /></td></tr>)}</tbody></table>
+    {edit && <Sheet title="حي / معلم" onClose={() => setEdit(null)} footer={<>{edit.id && <Btn kind="ghost" onClick={() => { archive('areas', edit.id); setEdit(null); }}>حذف</Btn>}<Btn kind="primary" disabled={!edit.name?.trim()} onClick={() => { const body = { name: edit.name.trim(), aliases: edit.aliases, kind: edit.kind, moughataa_code: edit.moughataa_code || null, wilaya_code: edit.moughataa_code ? moughataas.find((m) => m.code === edit.moughataa_code)?.wilaya_code : edit.wilaya_code || null }; if (edit.id) update('areas', edit.id, body); else create('areas', body); setEdit(null); }}>حفظ</Btn></>}>
+      <Field label="الاسم"><Input value={edit.name} onChange={(x) => setEdit({ ...edit, name: x })} /></Field>
+      <Field label="أسماء بديلة (افصل بفاصلة)"><Input value={(edit.aliases || []).join('، ')} onChange={(x) => setEdit({ ...edit, aliases: x.split(/[،,]/).map((y) => y.trim()).filter(Boolean) })} /></Field>
+      <Field label="النوع"><Seg value={edit.kind} onChange={(x) => setEdit({ ...edit, kind: x })} options={[['area', 'حي/منطقة'], ['landmark', 'معلم'], ['plan', 'مخطط']]} /></Field>
+      <Field label="المقاطعة (اختياري — فقط إن كنت متأكداً)"><Select value={edit.moughataa_code} onChange={(x) => setEdit({ ...edit, moughataa_code: x })} placeholder="غير محددة" options={[...wilayas].sort((a, b) => a.sort - b.sort).map((w) => ({ label: w.name_ar, options: moughataas.filter((m) => m.wilaya_code === w.code).map((m) => [m.code, m.name_ar]) }))} /></Field>
+    </Sheet>}
+  </Section>;
+}
+
+function DataTools() {
+  const [busy, setBusy] = useState(false);
+  return <>
+    <Section title="تصدير Excel">
+      <p className="hint">ملف Excel بعناوين عربية: العملاء، الطلبات، العروض، المواعيد، الصفقات، العمولات، المتابعات. الملف يحتوي بيانات خاصة؛ احفظه في مكان آمن.</p>
+      <div className="row-actions wrap">
+        <a className="btn btn-primary" href="/api/admin/export.xlsx" download><Icon name="download" /><span>تصدير الكل</span></a>
+        <a className="btn btn-default btn-sm" href="/api/admin/export.xlsx?sheets=people" download>العملاء فقط</a>
+        <a className="btn btn-default btn-sm" href="/api/admin/export.xlsx?sheets=appointments,tasks" download>المواعيد والمتابعات</a>
+      </div>
+    </Section>
+    <Section title="النسخ الاحتياطي والنقل">
+      <p className="hint">نسخة كاملة (قاعدة البيانات + الصور والوثائق) في ملف واحد tar.gz. احتفظ بها خارج الخادم (حاسوبك أو تخزين سحابي خاص). الاستعادة تتم على الخادم بأمر موثق في دليل التشغيل.</p>
+      <div className="row-actions wrap">
+        <a className="btn btn-primary" href="/api/admin/backup" download onClick={() => { setBusy(true); setTimeout(() => setBusy(false), 4000); }}><Icon name="download" /><span>{busy ? 'جارٍ التجهيز…' : 'تنزيل نسخة احتياطية كاملة'}</span></a>
+        <a className="btn btn-default btn-sm" href="/api/admin/export.json" download>تصدير JSON (للنقل إلى نظام آخر)</a>
+      </div>
+    </Section>
+  </>;
+}
+
+function Account() {
+  const s = useStore();
+  const toast = useToast();
+  const [cur, setCur] = useState(''); const [next, setNext] = useState('');
+  const [sessions, setSessions] = useState(null);
+  useEffect(() => { api('GET', '/sessions').then((r) => r.ok && setSessions(r.data.sessions)).catch(() => {}); }, []);
+  const change = async () => { const r = await api('POST', '/password', { current: cur, next }, { base: '/api/auth' }).catch(() => null); toast(r?.ok ? 'تغيّرت كلمة المرور وأُنهيت الجلسات الأخرى' : r?.data?.message || 'تعذر التغيير', r?.ok ? 'info' : 'err'); if (r?.ok) { setCur(''); setNext(''); } };
+  const pending = s.outbox.length;
+  return <>
+    <Section title="الحساب"><p>{s.user?.name} — <span dir="ltr">{s.user?.email}</span></p></Section>
+    <Section title="تغيير كلمة المرور">
+      <Field label="الحالية"><Input type="password" value={cur} onChange={setCur} autoComplete="current-password" /></Field>
+      <Field label="الجديدة (10 أحرف على الأقل)"><Input type="password" value={next} onChange={setNext} autoComplete="new-password" /></Field>
+      <Btn kind="primary" onClick={change} disabled={!cur || next.length < 10}>تغيير</Btn>
+    </Section>
+    <Section title="الأجهزة المسجلة">
+      {sessions ? <ul className="plain small">{sessions.map((x, i) => <li key={i}>{x.current ? <b>هذا الجهاز · </b> : null}{(x.user_agent || '').slice(0, 80)} · آخر نشاط {fmtDateTime(x.last_seen_at)}</li>)}</ul> : <p className="muted small">يحتاج اتصالاً.</p>}
+      <p className="hint">على iPhone، التطبيق المثبّت على الشاشة الرئيسية له جلسة مستقلة عن Safari؛ سجّل الدخول فيه مرة واحدة.</p>
+    </Section>
+    <Section title="الخروج">
+      {pending > 0 && <p className="warn-text">يوجد {pending} تعديل لم يُرسل بعد. الخروج الآن يحذفه من هذا الجهاز.</p>}
+      <p className="hint">الخروج يحذف النسخة المحفوظة من بياناتك على هذا الجهاز.</p>
+      <div className="row-actions"><Btn kind="danger" onClick={() => logout()}>خروج من هذا الجهاز</Btn><Btn onClick={() => logout({ all: true })}>خروج من كل الأجهزة</Btn></div>
+    </Section>
+    <Section title="تثبيت التطبيق" collapsible defaultOpen={false}>
+      <p><b>iPhone:</b> افتح مساحة العمل في Safari ← زر المشاركة ← «إضافة إلى الشاشة الرئيسية».</p>
+      <p><b>Android:</b> من قائمة Chrome ← «تثبيت التطبيق».</p>
+      <p><b>اللابتوب:</b> من شريط العنوان في Chrome/Edge ← أيقونة التثبيت.</p>
+    </Section>
+  </>;
+}
+
+function WhatsApp() {
+  const [st, setSt] = useState(null);
+  const load = (refresh) => api('GET', '/integrations/whatsapp' + (refresh ? '?refresh=1' : '')).then((r) => setSt(r.data)).catch(() => setSt({ state: 'error', label: 'لا يوجد اتصال' }));
+  useEffect(() => { load(false); }, []);
+  return <Section title="WhatsApp Business (اختياري)">
+    <p>الحالة: <b className={st?.state === 'connected' ? 'ok-text' : 'warn-text'}>{st ? st.label : '…'}</b> {st?.detail && <small className="muted">— {st.detail}</small>}</p>
+    <Btn small onClick={() => load(true)}>تحقق الآن</Btn>
+    <p className="hint">المنظومة تعمل كاملة بروابط واتساب والاتصال دون هذا الربط. عند توفر حساب WhatsApp Business Platform وتطبيق Meta، تُضبط الأسرار على الخادم (متغيرات البيئة) ويُستقبل الوارد هنا تلقائياً. لا تُرسل المنظومة أي رسالة بنفسها. التفاصيل ومتطلبات Coexistence في دليل التشغيل.</p>
+  </Section>;
+}
