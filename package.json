@@ -32,5 +32,8 @@
     "vite": "^8.3.5"
   },
   "type": "module",
-  "private": true
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  }
 }

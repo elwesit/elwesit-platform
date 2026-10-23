@@ -17,9 +17,11 @@ export const config = {
   port: Number(process.env.PORT || 8080),
   host: process.env.HOST || '0.0.0.0',
   // الرابط العام (لروابط المشاركة ومعاينات واتساب). يُضبط في الإنتاج.
-  baseUrl: (process.env.BASE_URL || '').replace(/\/$/, ''),
+  baseUrl: (process.env.BASE_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/$/, ''),
+  // نسخة تجريبية: شريط تنبيه ظاهر، ومنع الفهرسة، وتنبيه بأن البيانات قد تُمسح
+  preview: process.env.WASIT_PREVIEW === '1',
   // خلف وكيل HTTPS (Caddy/Nginx) اجعلها 1 ليُفعّل Secure على الكعكات
-  trustProxy: process.env.TRUST_PROXY === '1',
+  trustProxy: process.env.TRUST_PROXY === '1' || !!process.env.RENDER,
   secureCookies: process.env.SECURE_COOKIES ? process.env.SECURE_COOKIES === '1' : process.env.NODE_ENV === 'production',
   sessionDays: Number(process.env.SESSION_DAYS || 30),
   maxUploadMB: Number(process.env.MAX_UPLOAD_MB || 25),

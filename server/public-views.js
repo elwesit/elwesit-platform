@@ -3,6 +3,7 @@ import { escapeHtml as e } from '../shared/text.js';
 import { TYPES, DEALS_PUBLIC, FEATURES } from '../shared/vocab.js';
 import { formatAmountWords, formatNumber, PRICE_BASIS } from '../shared/money.js';
 import { displayPhone, normalizePhone } from '../shared/phone.js';
+import { config } from './config.js';
 
 export function priceText(l) {
   if (l.price_hidden || l.price_amount == null) return { main: 'السعر عند التواصل', alt: '' };
@@ -43,11 +44,13 @@ ${canonical ? `<link rel="canonical" href="${e(canonical)}">` : ''}
 ${canonical ? `<meta property="og:url" content="${e(canonical)}">` : ''}
 ${ogImage ? `<meta property="og:image" content="${e(ogImage)}"><meta name="twitter:card" content="summary_large_image">` : ''}
 <meta name="theme-color" content="#0e5a4c">
+${config.preview ? '<meta name="robots" content="noindex, nofollow">' : ''}
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/public.css?v=${site.__v}">
 ${head}
 </head>
 <body class="${bodyClass}">
+${config.preview ? '<div class="preview-bar" role="note">نسخة تجريبية للمعاينة — ليست الموقع الرسمي، والبيانات فيها للاختبار وقد تُمسح في أي وقت.</div>' : ''}
 ${staff ? `<div class="staffbar"><span>أنت مسجّل كمدير. هذه هي الصفحة كما يراها الزوار.</span><a href="/admin/">مساحة العمل ←</a></div>` : ''}
 <header class="site-header">
   <div class="wrap header-row">

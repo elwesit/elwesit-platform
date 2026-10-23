@@ -1,0 +1,27 @@
+# نسخة معاينة مجانية على Render (خطة free): بلا قرص دائم، فالبيانات تُمسح عند كل إعادة تشغيل أو خمول.
+# الأسرار (بريد وكلمة مرور المدير) تُدخل في لوحة Render عند الإنشاء، ولا تُكتب هنا.
+services:
+  - type: web
+    name: elwesit-preview
+    runtime: node
+    plan: free
+    branch: main
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /robots.txt
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: WASIT_PREVIEW
+        value: "1"
+      - key: SECURE_COOKIES
+        value: "1"
+      - key: WASIT_DATA_DIR
+        value: /tmp/wasit-data
+      - key: WASIT_ADMIN_EMAIL
+        sync: false
+      - key: WASIT_ADMIN_PASSWORD
+        sync: false

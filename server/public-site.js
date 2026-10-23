@@ -223,7 +223,7 @@ export function publicRouter() {
   r.get('/terms', (req, res) => { const s = site(); res.send(layout(s, { title: 'الشروط', body: termsPage(s) })); });
   r.get('/content-rights', (req, res) => { const s = site(); res.send(layout(s, { title: 'حقوق المحتوى', body: contentPage(s) })); });
 
-  r.get('/robots.txt', (req, res) => res.type('text/plain').send(`User-agent: *\nDisallow: /admin/\nDisallow: /api/\nDisallow: /submit\nSitemap: ${baseUrl(req, site())}/sitemap.xml\n`));
+  r.get('/robots.txt', (req, res) => config.preview ? res.type('text/plain').send('User-agent: *\nDisallow: /\n') : res.type('text/plain').send(`User-agent: *\nDisallow: /admin/\nDisallow: /api/\nDisallow: /submit\nSitemap: ${baseUrl(req, site())}/sitemap.xml\n`));
   r.get('/sitemap.xml', (req, res) => {
     const s = site(); const b = baseUrl(req, s);
     const rows = publicReadDb().prepare('SELECT ref, updated_at FROM listings ORDER BY published_at DESC LIMIT 5000').all();

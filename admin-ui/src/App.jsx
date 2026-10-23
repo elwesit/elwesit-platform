@@ -102,6 +102,7 @@ function Banners() {
   const s = useStore();
   const [show, setShow] = useState(null);
   return <>
+    {s.preview && <div className="banner warn">نسخة تجريبية للمعاينة: البيانات هنا للاختبار فقط وتُمسح عند إعادة تشغيل الخادم. لا تُدخل بيانات عملاء حقيقية.</div>}
     {s.offlineBoot && <div className="banner warn">تعرض النسخة المحفوظة على هذا الجهاز. لم نتمكن من التحقق من الجلسة مع الخادم بعد؛ التعديلات ستنتظر حتى الاتصال.</div>}
     {s.conflicts.length > 0 && <div className="banner danger"><span>{s.conflicts.length} تعديل يتعارض مع تعديل من جهاز آخر — لم يُكتب فوقه.</span><Btn small kind="primary" onClick={() => setShow('conflicts')}>راجع واختر</Btn></div>}
     {s.failed.length > 0 && <div className="banner danger"><span>{s.failed.length} عملية لم تُحفظ.</span><Btn small onClick={() => setShow('failed')}>التفاصيل</Btn></div>}

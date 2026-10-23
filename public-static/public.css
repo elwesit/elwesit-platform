@@ -197,3 +197,5 @@ fieldset.inline label { display: flex; align-items: center; gap: 6px; min-height
   .property { padding-bottom: 96px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+.preview-bar{background:#7a4a00;color:#fff;text-align:center;padding:.4rem 1rem;font-size:.9rem}
