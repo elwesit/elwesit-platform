@@ -8,6 +8,7 @@ import { personLabel, price, locLabel, propertyTitle, geoLabel, fmtDate, shareTe
 import { MatchReasons } from './Properties.jsx';
 import { href, go, back } from '../router.js';
 import { norm } from '@shared/text.js';
+import { requestWantsRooms } from '@shared/typeFields.js';
 
 export default function Requests({ route, wide }) {
   const id = route.parts[1];
@@ -18,7 +19,7 @@ export default function Requests({ route, wide }) {
 function EditWrap({ id }) { const r = useRow('requests', id); return r ? <RequestForm initial={r} onDone={() => go('requests/' + id)} /> : <Empty title="غير موجود" />; }
 
 export function requestSummary(r) {
-  return [DEALS[r.deal], (r.types || []).map((t) => TYPES[t]).join(' أو '), (r.locations || []).map(locLabel).filter(Boolean).join('، '), r.budget_max != null ? 'حتى ' + price(r.budget_max, r.budget_currency, r.budget_basis) : r.budget_raw, r.area_min ? `${r.area_min}${r.area_max ? '–' + r.area_max : '+'} م²` : ''].filter(Boolean).join(' · ');
+  return [DEALS[r.deal], (r.types || []).map((t) => TYPES[t]).join(' أو '), (r.locations || []).map(locLabel).filter(Boolean).join('، '), r.budget_max != null ? 'حتى ' + price(r.budget_max, r.budget_currency, r.budget_basis) : r.budget_raw, r.area_min != null || r.area_max != null ? (r.area_min == null || r.area_max == null || r.area_min === r.area_max ? `${r.area_max ?? r.area_min} م²` : `${r.area_min}–${r.area_max} م²`) : ''].filter(Boolean).join(' · ');
 }
 
 function RequestList({ selected }) {
@@ -162,10 +163,23 @@ export function RequestForm({ initial, personId, onDone, embedded, value: ext, o
     if (initial) { if (Object.keys(body).length) update('requests', initial.id, body); onDone(initial.id); }
     else onDone(create('requests', body));
   };
+  // الغرف تُسأل فقط إن كان بين الأنواع المطلوبة نوع سكني، وأساس الميزانية يتبع العملية
+  const rooms = requestWantsRooms(val.types) || !(val.types || []).length && val.bedrooms_min != null;
+  const choose = (patch) => {
+    const n = { ...val, ...patch };
+    if (n.bedrooms_min != null && (n.types || []).length && !requestWantsRooms(n.types)) patch.bedrooms_min = null;
+    if (n.deal === 'rent' && (!n.budget_basis || n.budget_basis === 'total')) patch.budget_basis = 'monthly';
+    if (n.deal === 'sale' && ['monthly', 'yearly', 'daily'].includes(n.budget_basis)) patch.budget_basis = 'total';
+    set(patch);
+  };
+  const area = val.area_max ?? val.area_min ?? null;
+  const budgetV = { budget_raw: val.budget_raw, budget_amount: val.budget_max, budget_currency: val.budget_currency, budget_basis: val.budget_basis };
+  const budgetSet = (p) => { const m = {}; for (const [k, x] of Object.entries(p)) m[k === 'budget_amount' ? 'budget_max' : k] = x; set(m); };
+  const extraCount = ['budget_raw', 'budget_min', 'specs', 'flexibility', 'source'].filter((k) => val[k] != null && val[k] !== '').length + (val.priority && val.priority !== 'normal' ? 1 : 0);
   const fields = <>
     {!embedded && <PersonPicker value={val.person_id} onChange={(x) => set({ person_id: x })} label="العميل" roles={['buyer']} />}
-    <Field label="يبحث عن"><Seg value={val.deal} onChange={(x) => set({ deal: x })} options={[['sale', 'شراء'], ['rent', 'إيجار']]} allowNone /></Field>
-    <Field label="نوع العقار (يمكن أكثر من نوع)"><Chips value={val.types} onChange={(x) => set({ types: x })} options={Object.entries(TYPES)} /></Field>
+    <Field label="يبحث عن"><Seg value={val.deal} onChange={(x) => choose({ deal: x })} options={[['sale', 'شراء'], ['rent', 'إيجار']]} allowNone /></Field>
+    <Field label="نوع العقار (يمكن أكثر من نوع)"><Chips value={val.types} onChange={(x) => choose({ types: x })} options={Object.entries(TYPES)} /></Field>
     <Field label="المواقع المطلوبة">
       <div className="chips">{(val.locations || []).map((l, i) => <span key={i} className="chip on">{locLabel(l)}<button type="button" aria-label="إزالة" onClick={() => set({ locations: val.locations.filter((_, j) => j !== i) })}>×</button></span>)}</div>
       <div className="inline-form">
@@ -178,25 +192,30 @@ export function RequestForm({ initial, personId, onDone, embedded, value: ext, o
         <Btn small onClick={() => { if (locText.trim()) { addLoc({ text: locText.trim() }); setLocText(''); } }}>أضف</Btn>
       </div>
     </Field>
-    <PriceFields prefix="budget" label="الميزانية (الحد الأعلى)" value={{ budget_raw: val.budget_raw, budget_amount: val.budget_max, budget_currency: val.budget_currency, budget_basis: val.budget_basis }} onChange={(p) => { const m = {}; for (const [k, x] of Object.entries(p)) m[k === 'budget_amount' ? 'budget_max' : k] = x; set(m); }} />
-    <div className="grid3">
-      <Field label="الحد الأدنى للميزانية (اختياري)"><NumInput value={val.budget_min} onChange={(x) => set({ budget_min: x })} /></Field>
-      <Field label="المساحة من (م²)"><NumInput value={val.area_min} onChange={(x) => set({ area_min: x })} /></Field>
-      <Field label="المساحة إلى (م²)"><NumInput value={val.area_max} onChange={(x) => set({ area_max: x })} /></Field>
-      <Field label="غرف على الأقل"><NumInput value={val.bedrooms_min} onChange={(x) => set({ bedrooms_min: x })} /></Field>
-    </div>
-    <Field label="مواصفات أخرى"><TextArea value={val.specs} onChange={(x) => set({ specs: x })} rows={2} placeholder="ركن، قرب الشارع المسفلت…" /></Field>
-    <Field label="المرونة"><Input value={val.flexibility} onChange={(x) => set({ flexibility: x })} placeholder="يقبل مقاطعة مجاورة، أو زيادة بسيطة…" /></Field>
     <div className="grid2">
-      <Field label="الأولوية"><Select value={val.priority} onChange={(x) => set({ priority: x || 'normal' })} options={Object.entries(PRIORITY)} /></Field>
-      <Field label="المصدر"><Input value={val.source} onChange={(x) => set({ source: x })} placeholder="معرفة، واتساب، الموقع…" /></Field>
+      <Field label="المساحة بالمتر المربع" hint={area != null ? 'تقريبية: تُقبل العروض الأصغر أو الأكبر بـ10% تقريباً' : undefined}><NumInput value={area} onChange={(x) => set({ area_min: x, area_max: x })} placeholder="مثلاً 300" /></Field>
+      {rooms && <Field label="عدد الغرف (على الأقل)"><NumInput value={val.bedrooms_min} onChange={(x) => set({ bedrooms_min: x })} /></Field>}
     </div>
-    {!embedded && <Field label="ملاحظات خاصة"><TextArea value={val.notes} onChange={(x) => set({ notes: x })} rows={2} /></Field>}
+    {val.area_min != null && val.area_max != null && val.area_min !== val.area_max && <small className="hint">مسجلة سابقاً كنطاق {val.area_min}–{val.area_max} م²؛ كتابة رقم جديد تستبدله.</small>}
+    <PriceFields prefix="budget" label="الميزانية" simple value={budgetV} onChange={budgetSet} />
+    {!embedded && <Field label="ملاحظات خاصة (لا تظهر للعميل)"><TextArea value={val.notes} onChange={(x) => set({ notes: x })} rows={2} /></Field>}
+    <details className="more-details">
+      <summary>تفاصيل إضافية {extraCount ? <small>({extraCount} معبأة)</small> : <small>(اختيارية)</small>}</summary>
+      <PriceFields prefix="budget" value={budgetV} onChange={budgetSet} detailsOnly />
+      <Field label="أقل ميزانية (إن ذكرها)"><NumInput value={val.budget_min} onChange={(x) => set({ budget_min: x })} /></Field>
+      <Field label="مواصفات أخرى"><TextArea value={val.specs} onChange={(x) => set({ specs: x })} rows={2} placeholder="ركن، قرب الشارع المسفلت…" /></Field>
+      <Field label="المرونة"><Input value={val.flexibility} onChange={(x) => set({ flexibility: x })} placeholder="يقبل مقاطعة مجاورة، أو زيادة بسيطة…" /></Field>
+      <div className="grid2">
+        <Field label="الأولوية"><Select value={val.priority} onChange={(x) => set({ priority: x || 'normal' })} options={Object.entries(PRIORITY)} /></Field>
+        <Field label="المصدر"><Input value={val.source} onChange={(x) => set({ source: x })} placeholder="معرفة، واتساب، الموقع…" /></Field>
+      </div>
+    </details>
   </>;
   if (embedded) return fields;
   return <div className="page form-page">
     <div className="page-head"><h1>{initial ? `تعديل الطلب ${initial.ref}` : 'طلب جديد'}</h1></div>
+    <p className="hint">لا شيء إلزامي للحفظ. سجّل ما تعرفه الآن وأكمل لاحقاً.</p>
     {fields}
-    <div className="form-actions sticky"><Btn onClick={() => back('requests')}>إلغاء</Btn><Btn kind="primary" onClick={save}>حفظ</Btn></div>
+    <div className="form-actions sticky"><Btn onClick={() => back('requests')}>إلغاء</Btn><Btn kind="primary" onClick={save}>حفظ الطلب</Btn></div>
   </div>;
 }

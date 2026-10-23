@@ -102,7 +102,7 @@ function ConvertSheet({ m, mode, knownPersonId, prop, onClose }) {
     const gaz = buildGazetteer({ wilayas: table('wilayas'), moughataas: table('moughataas'), areas: table('areas') });
     return parseCapture([p.location, p.budget || p.price, p.area ? p.area + ' متر' : ''].filter(Boolean).join(' '), { gazetteer: gaz });
   }, []); // eslint-disable-line
-  const [req, setReq] = useState(() => ({ deal: p.deal, types: p.type ? [p.type] : [], locations: parsed.locations.length ? parsed.locations.map(({ wilaya_code, moughataa_code, area_id, text }) => ({ wilaya_code, moughataa_code, area_id, text })) : (p.location ? [{ text: p.location }] : []), budget_raw: p.budget || '', budget_max: parsed.price?.max ?? parsed.price?.amount ?? null, budget_currency: parsed.price?.currency || 'unknown', budget_basis: parsed.price?.basis || 'total', area_min: parsed.area_m2, specs: m.message || '', priority: 'normal', status: 'new' }));
+  const [req, setReq] = useState(() => ({ deal: p.deal, types: p.type ? [p.type] : [], locations: parsed.locations.length ? parsed.locations.map(({ wilaya_code, moughataa_code, area_id, text }) => ({ wilaya_code, moughataa_code, area_id, text })) : (p.location ? [{ text: p.location }] : []), budget_raw: p.budget || '', budget_max: parsed.price?.max ?? parsed.price?.amount ?? null, budget_currency: parsed.price?.currency || 'unknown', budget_basis: parsed.price?.basis || 'total', area_min: parsed.area_m2 ?? null, area_max: parsed.area_m2 ?? null, specs: m.message || '', priority: 'normal', status: 'new' }));
   const [busy, setBusy] = useState(false);
   const submit = async () => {
     if (!s.online) { toast('التحويل يحتاج اتصالاً؛ سيُرسل عند الاتصال', 'info'); }

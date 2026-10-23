@@ -9,6 +9,7 @@ import { TYPES, DEALS } from '@shared/vocab.js';
 import { formatAmountWords } from '@shared/money.js';
 import { fmtDateLong, fmtTime, toLocalInput, fromLocalInput, phonesOf, personLabel } from '../fmt.js';
 import { go } from '../router.js';
+import { fieldsFor, cleanupFor } from '@shared/typeFields.js';
 
 const DRAFT = 'wasit-capture-draft';
 const EXAMPLES = ['طلب لمحمد يبحث عن قطعة في تفرغ زينه 400 متر وميزانيته خمسون مليوناً', 'عرض عند أحمد بتيارت 600 متر والسعر سبعون مليوناً', 'ذكرني أتصل بمحمد غداً الساعة العاشرة'];
@@ -123,9 +124,13 @@ function Review({ parsed, method, audio, onSaved }) {
   const [currencyOk, setCurrencyOk] = useState(parsed.price ? parsed.price.currency !== 'unknown' : true);
   const [dealOk, setDealOk] = useState(!parsed.deal_inferred);
   const [timeOk, setTimeOk] = useState(!parsed.issues.some((i) => i.kind === 'time_period'));
-  const [req, setReq] = useState(() => ({ deal: parsed.deal, types: parsed.types, locations: parsed.locations.map(({ wilaya_code, moughataa_code, area_id, text }) => ({ wilaya_code, moughataa_code, area_id, text })), budget_raw: parsed.price?.raw || '', budget_min: parsed.price?.min ?? null, budget_max: parsed.price?.max ?? parsed.price?.amount ?? null, budget_currency: parsed.price?.currency || 'unknown', budget_basis: parsed.price?.basis || 'total', area_min: parsed.area_m2 != null ? Math.round(parsed.area_m2 * 0.9) : null, area_max: parsed.area_m2 != null ? Math.round(parsed.area_m2 * 1.15) : null, bedrooms_min: parsed.bedrooms, specs: '', priority: 'normal', status: 'new', flexibility: '' }));
+  const [req, setReq] = useState(() => ({ deal: parsed.deal, types: parsed.types, locations: parsed.locations.map(({ wilaya_code, moughataa_code, area_id, text }) => ({ wilaya_code, moughataa_code, area_id, text })), budget_raw: parsed.price?.raw || '', budget_min: parsed.price?.min ?? null, budget_max: parsed.price?.max ?? parsed.price?.amount ?? null, budget_currency: parsed.price?.currency || 'unknown', budget_basis: parsed.price?.basis || 'total', area_min: parsed.area_m2 ?? null, area_max: parsed.area_m2 ?? null, bedrooms_min: parsed.bedrooms, specs: '', priority: 'normal', status: 'new', flexibility: '' }));
   const loc0 = parsed.locations.find((l) => l.level !== 'wilaya') || parsed.locations[0];
   const [prop, setProp] = useState(() => ({ deal: parsed.deal, type: parsed.types[0] || null, wilaya_code: loc0?.wilaya_code || null, moughataa_code: loc0?.moughataa_code || null, area_id: loc0?.area_id || null, area_text: loc0?.level === 'area' ? loc0.label : '', landmark: parsed.landmark, area_m2: parsed.area_m2, lot_number: parsed.lot_number, plan: parsed.plan, sector: parsed.sector, bedrooms: parsed.bedrooms, features: parsed.features, price_raw: parsed.price?.raw || '', price_amount: parsed.price?.amount ?? parsed.price?.max ?? null, price_currency: parsed.price?.currency || 'unknown', price_basis: parsed.price?.basis || 'total', availability: 'available', verified_at: new Date().toISOString() }));
+  // قبل اختيار النوع تُعرض كل الخانات التي استُخلص لها شيء، وبعده ما يناسب النوع فقط
+  const pfT = fieldsFor(prop.type, prop.deal);
+  const pf = prop.type ? pfT : { lot: true, rooms: true };
+  const chooseProp = (patch) => setProp((x) => { const n = { ...x, ...patch }; return { ...n, ...cleanupFor(n) }; });
   const [relation, setRelation] = useState('owner');
   const [commission, setCommission] = useState('');
   const [task, setTask] = useState(() => ({ title: parsed.task_title || '', due_at: parsed.due?.iso || null, due_has_time: parsed.due?.has_time ? 1 : 0, enabled: parsed.intent === 'reminder' || !!parsed.due }));
@@ -190,18 +195,18 @@ function Review({ parsed, method, audio, onSaved }) {
 
     {intent === 'request' && <Section title="الطلب"><RequestForm embedded value={req} onChange={setReq} /></Section>}
     {intent === 'offer' && <Section title="العرض">
-      <Field label="العملية"><Seg value={prop.deal} onChange={(x) => setProp({ ...prop, deal: x })} options={Object.entries(DEALS)} allowNone /></Field>
-      <Field label="النوع"><div className="chips">{Object.entries(TYPES).map(([k, l]) => <button type="button" key={k} className={prop.type === k ? 'chip on' : 'chip'} onClick={() => setProp({ ...prop, type: k })}>{l}</button>)}</div></Field>
+      <Field label="بيع أم إيجار؟"><Seg value={prop.deal} onChange={(x) => chooseProp({ deal: x })} options={Object.entries(DEALS)} allowNone /></Field>
+      <Field label="نوع العقار"><div className="chips">{Object.entries(TYPES).map(([k, l]) => <button type="button" key={k} className={prop.type === k ? 'chip on' : 'chip'} aria-pressed={prop.type === k} onClick={() => chooseProp({ type: prop.type === k ? null : k })}>{l}</button>)}</div></Field>
       <GeoFields value={prop} onChange={(p) => setProp({ ...prop, ...p })} />
       <div className="grid3">
-        <Field label="المساحة م²"><NumInput value={prop.area_m2} onChange={(x) => setProp({ ...prop, area_m2: x })} /></Field>
-        <Field label="رقم القطعة"><Input value={prop.lot_number} onChange={(x) => setProp({ ...prop, lot_number: x })} /></Field>
-        <Field label="المخطط"><Input value={prop.plan} onChange={(x) => setProp({ ...prop, plan: x })} /></Field>
-        <Field label="القطاع"><Input value={prop.sector} onChange={(x) => setProp({ ...prop, sector: x })} /></Field>
+        <Field label="المساحة بالمتر المربع"><NumInput value={prop.area_m2} onChange={(x) => setProp({ ...prop, area_m2: x })} /></Field>
+        {pf.lot && <Field label="رقم القطعة"><Input value={prop.lot_number} onChange={(x) => setProp({ ...prop, lot_number: x })} /></Field>}
+        {pf.lot && <Field label="المخطط"><Input value={prop.plan} onChange={(x) => setProp({ ...prop, plan: x })} /></Field>}
+        {pf.lot && <Field label="القطاع"><Input value={prop.sector} onChange={(x) => setProp({ ...prop, sector: x })} /></Field>}
         <Field label="معلم قريب"><Input value={prop.landmark} onChange={(x) => setProp({ ...prop, landmark: x })} /></Field>
-        <Field label="الغرف"><NumInput value={prop.bedrooms} onChange={(x) => setProp({ ...prop, bedrooms: x })} /></Field>
+        {pf.rooms && <Field label="عدد الغرف"><NumInput value={prop.bedrooms} onChange={(x) => setProp({ ...prop, bedrooms: x })} /></Field>}
       </div>
-      <PriceFields value={prop} onChange={(p) => setProp({ ...prop, ...p })} />
+      <PriceFields value={prop} onChange={(p) => setProp({ ...prop, ...p })} simple />
       <Field label="مصدر العرض"><Seg value={relation} onChange={setRelation} options={[['owner', 'المالك نفسه'], ['broker', 'وسيط'], ['relative', 'قريب المالك'], ['other', 'أخرى']]} /></Field>
       <Field label="العمولة المتفق عليها مع المصدر (اختياري)"><Input value={commission} onChange={setCommission} /></Field>
     </Section>}

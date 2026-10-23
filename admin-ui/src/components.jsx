@@ -65,11 +65,15 @@ export function GeoFields({ value, onChange }) {
   const sugg = useMemo(() => {
     const q = norm(areaQ || value.area_text || '');
     if (!q) return [];
-    return areas.filter((a) => !a.archived_at && [a.name, ...(a.aliases || [])].some((n) => norm(n).includes(q))).slice(0, 6);
-  }, [areaQ, value.area_text, areas]);
+    // أحياء المقاطعة المختارة فقط (والأحياء غير المربوطة بمقاطعة)، لا أحياء المقاطعات الأخرى
+    const inScope = (a) => (value.moughataa_code ? !a.moughataa_code || a.moughataa_code === value.moughataa_code : !value.wilaya_code || !a.wilaya_code || a.wilaya_code === value.wilaya_code);
+    return areas.filter((a) => !a.archived_at && inScope(a) && [a.name, ...(a.aliases || [])].some((n) => norm(n).includes(q))).slice(0, 6);
+  }, [areaQ, value.area_text, areas, value.moughataa_code, value.wilaya_code]);
+  // حي محفوظ لا يتبع المقاطعة/الولاية الجديدة يُفرَّغ
+  const areaFits = (a, m, w) => !a || ((!m || !a.moughataa_code || a.moughataa_code === m) && (!w || !a.wilaya_code || a.wilaya_code === w));
   return <div className="grid2">
-    <Field label="الولاية"><Select value={value.wilaya_code} onChange={(v) => onChange({ wilaya_code: v, moughataa_code: v && value.moughataa_code && moughataas.find((m) => m.code === value.moughataa_code)?.wilaya_code !== v ? null : value.moughataa_code })} placeholder="—" options={[...wilayas].sort((a, b) => a.sort - b.sort).map((w) => [w.code, w.name_ar])} /></Field>
-    <Field label="المقاطعة"><Select value={value.moughataa_code} onChange={(v) => onChange({ moughataa_code: v, wilaya_code: v ? moughataas.find((m) => m.code === v)?.wilaya_code : value.wilaya_code })} placeholder="—" options={ms.map((m) => [m.code, m.name_ar])} /></Field>
+    <Field label="الولاية"><Select value={value.wilaya_code} onChange={(v) => { const m = v && value.moughataa_code && moughataas.find((x) => x.code === value.moughataa_code)?.wilaya_code !== v ? null : value.moughataa_code; onChange({ wilaya_code: v, moughataa_code: m, ...(areaFits(curArea, m, v) ? {} : { area_id: null, area_text: '' }) }); }} placeholder="—" options={[...wilayas].sort((a, b) => a.sort - b.sort).map((w) => [w.code, w.name_ar])} /></Field>
+    <Field label="المقاطعة"><Select value={value.moughataa_code} onChange={(v) => { const w = v ? moughataas.find((m) => m.code === v)?.wilaya_code : value.wilaya_code; onChange({ moughataa_code: v, wilaya_code: w, ...(areaFits(curArea, v, w) ? {} : { area_id: null, area_text: '' }) }); }} placeholder="—" options={ms.map((m) => [m.code, m.name_ar])} /></Field>
     <Field label="الحي / المنطقة" hint={curArea ? 'من قائمة الأحياء المحفوظة' : 'اكتب كما يُعرف في السوق'} wide>
       {curArea ? <div className="picked"><span>{curArea.name}</span><button type="button" className="icon-btn" aria-label="تغيير" onClick={() => onChange({ area_id: null, area_text: curArea.name })}><Icon name="close" size={16} /></button></div> : <div className="picker">
         <input value={value.area_text || ''} onChange={(e) => { setAreaQ(e.target.value); onChange({ area_text: e.target.value }); }} placeholder="مثلاً: سوكوجيم، كارفور مدريد، بلوكات" />
@@ -80,22 +84,27 @@ export function GeoFields({ value, onChange }) {
   </div>;
 }
 
-// ---------- السعر: النص كما ورد + القيمة + العملة + الأساس ----------
-export function PriceFields({ prefix = 'price', value, onChange, label = 'السعر' }) {
+// ---------- السعر: القيمة + العملة (والنص كما ورد والأساس في وضع التفاصيل) ----------
+// simple: القيمة والعملة فقط؛ الأساس يتبع العملية تلقائياً (إيجار = شهري) ويُعدَّل من «تفاصيل إضافية»
+export function PriceFields({ prefix = 'price', value, onChange, label = 'السعر', simple = false, detailsOnly = false }) {
   const raw = value[`${prefix}_raw`] ?? '';
   const amount = value[`${prefix}_amount`];
   const currency = value[`${prefix}_currency`] || 'unknown';
   const basis = value[`${prefix}_basis`] || 'total';
   const readings = amount != null ? currencyReadings(amount) : [];
-  return <fieldset className="fieldset"><legend>{label}</legend>
+  const rawF = <Field label="السعر كما قيل (نص)" hint="يُحفظ كما هو للرجوع إليه"><Input value={raw} onChange={(v) => onChange({ [`${prefix}_raw`]: v })} placeholder="مثلاً: 70 مليون" /></Field>;
+  const basisF = <Field label="السعر محسوب على"><Select value={basis} onChange={(v) => onChange({ [`${prefix}_basis`]: v || 'total' })} options={Object.entries(PRICE_BASIS)} /></Field>;
+  if (detailsOnly) return <div className="grid2">{rawF}{basisF}</div>;
+  const basisNote = basis !== 'total' ? ` (${PRICE_BASIS[basis]})` : '';
+  return <fieldset className="fieldset"><legend>{label}{simple ? basisNote : ''}</legend>
     <div className="grid2">
-      <Field label="كما ورد (نص)" hint="يُحفظ كما هو للرجوع إليه"><Input value={raw} onChange={(v) => onChange({ [`${prefix}_raw`]: v })} placeholder="مثلاً: 70 مليون" /></Field>
-      <Field label="القيمة (رقم)" hint={amount != null ? formatAmountWords(amount) : 'اتركه فارغاً إن كان غير معروف'}><NumInput value={amount} onChange={(v) => onChange({ [`${prefix}_amount`]: v })} /></Field>
+      {!simple && rawF}
+      <Field label="المبلغ بالأرقام" hint={amount != null ? formatAmountWords(amount) : 'اتركه فارغاً إن لم يُعرف بعد'}><NumInput value={amount} onChange={(v) => onChange({ [`${prefix}_amount`]: v })} placeholder="مثلاً 3000000" /></Field>
     </div>
-    <Field label="العملة"><Seg value={currency} onChange={(v) => onChange({ [`${prefix}_currency`]: v })} options={[['MRO', 'أوقية قديمة'], ['MRU', 'أوقية جديدة'], ['unknown', 'غير مؤكدة']]} /></Field>
-    {amount != null && currency === 'unknown' && <div className="warn-box small">العملة غير مؤكدة: {readings.map((r) => <span key={r.currency}><b>{r.label}</b> {r.hint}؛ </span>)} لن تُستعمل القيمة في المطابقة أو النشر حتى تؤكد العملة.</div>}
+    <Field label="العملة"><Seg value={currency} onChange={(v) => onChange({ [`${prefix}_currency`]: v })} options={[['MRU', 'أوقية جديدة'], ['MRO', 'أوقية قديمة'], ['unknown', 'لا أعرف']]} /></Field>
+    {amount != null && currency === 'unknown' && <div className="warn-box small">اختر العملة: {readings.map((r) => <span key={r.currency}><b>{r.label}</b> {r.hint}؛ </span>)} بدونها لا يُنشر السعر ولا يدخل في المطابقة.</div>}
     {amount != null && currency !== 'unknown' && <small className="hint">= {currency === 'MRO' ? `${formatAmountWords(amount / 10)} أوقية جديدة` : `${formatAmountWords(amount * 10)} أوقية قديمة`}</small>}
-    <Field label="أساس السعر"><Select value={basis} onChange={(v) => onChange({ [`${prefix}_basis`]: v || 'total' })} options={Object.entries(PRICE_BASIS)} /></Field>
+    {!simple && basisF}
   </fieldset>;
 }
 

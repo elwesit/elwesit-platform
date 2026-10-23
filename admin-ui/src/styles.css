@@ -350,3 +350,20 @@ textarea { resize: vertical; }
 
 .settings .seg { margin-bottom: 14px; }
 .tpl { border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+
+/* تفاصيل إضافية مطوية */
+.more-details { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); margin: 12px 0; }
+.more-details > summary { cursor: pointer; padding: 14px 16px; font-weight: 700; color: var(--brand); list-style: none; display: flex; align-items: center; gap: 8px; min-height: 48px; }
+.more-details > summary::-webkit-details-marker { display: none; }
+.more-details > summary::before { content: '＋'; font-size: 1.1rem; }
+.more-details[open] > summary::before { content: '−'; }
+.more-details > summary small { color: var(--muted); font-weight: 400; }
+.more-details[open] > summary { border-bottom: 1px solid var(--line); }
+.more-details > :not(summary) { margin-inline: 16px; }
+.more-details > :last-child { margin-bottom: 16px; }
+.more-details > summary + * { margin-top: 12px; }
+/* حالة النشر */
+.pub-status { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); margin: 10px 0; }
+.pub-status.on { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, var(--surface)); }
+.pub-status .pub-label { font-weight: 700; flex: 1 1 200px; }
+.pub-status .pub-label small { display: block; font-weight: 400; color: var(--muted); }

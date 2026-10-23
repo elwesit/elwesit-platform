@@ -87,21 +87,22 @@ test('عرض جديد ← نشر ← يراه الزائر بالفلاتر وا
   await page.getByLabel('الولاية').selectOption({ label: 'نواكشوط الشمالية' });
   await page.getByLabel('المقاطعة').selectOption({ label: 'توجنين' });
   await page.getByLabel('رقم القطعة (النمرة)').fill(lot);
-  await page.getByLabel('القيمة (رقم)').fill('3000000');
+  await page.getByLabel('المبلغ بالأرقام').fill('3000000');
   await page.getByRole('radio', { name: 'أوقية جديدة' }).click();
   await page.getByLabel('ملاحظات خاصة (لا تُنشر أبداً)').fill('سر-داخلي-' + lot);
-  await page.getByRole('button', { name: 'حفظ' }).click();
+  await page.getByRole('button', { name: 'حفظ العرض' }).click();
   await expect(page).toHaveURL(/#\/properties\/[0-9a-f-]{36}/);
   await waitSaved(page);
+  await expect(page.locator('.pub-status')).toContainText('مسودة');
 
   // البحث برقم القطعة يجده
   await page.goto('/admin/#/search?q=' + lot);
   await expect(page.locator('body')).toContainText('قطعة أرض');
   await page.goBack();
 
-  await page.getByRole('button', { name: /النشر على الموقع/ }).click();
   await page.getByRole('button', { name: 'انشر على الموقع' }).click();
-  await expect(page.getByRole('button', { name: 'سحب النشر' })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByRole('button', { name: 'إلغاء النشر' })).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('.pub-status')).toContainText('منشور');
   const { data: tables } = await api(page).get('/sync?since=');
   const prop = tables.properties.find((p) => p.lot_number === lot);
   expect(prop.published).toBeTruthy();
@@ -126,7 +127,7 @@ test('عرض جديد ← نشر ← يراه الزائر بالفلاتر وا
   await expect(v.locator('.leaflet-container')).toBeVisible({ timeout: 15000 });
   await expect(v.locator('.leaflet-container')).toContainText(/OpenStreetMap/);
 
-  await page.getByRole('button', { name: 'سحب النشر' }).click();
+  await page.getByRole('button', { name: 'إلغاء النشر' }).click();
   await expect(page.getByRole('button', { name: 'انشر على الموقع' })).toBeVisible({ timeout: 15000 });
   const gone = await v.goto('/p/' + prop.ref);
   expect(gone.status()).toBe(404);
@@ -149,7 +150,7 @@ test('الالتقاط السريع: لصق رسالة واتساب ← تأكي
   if (await deal.count()) await deal.getByRole('button').first().click();
   await expect(save).toBeEnabled();
   await expect(page.getByLabel('رقم القطعة')).toHaveValue(lot);
-  await expect(page.getByLabel('المساحة م²')).toHaveValue('300');
+  await expect(page.getByLabel('المساحة بالمتر المربع')).toHaveValue('300');
   await save.click();
   await expect(page).toHaveURL(/#\/properties\//, { timeout: 15000 });
   await waitSaved(page);
@@ -205,17 +206,22 @@ test('تعديل من الجوال ثم من الحاسوب على الحقل ن
 test('رفع صورة بموقع GPS ← النسخة العامة بلا بيانات EXIF', async ({ page }) => {
   await login(page);
   const lot = 'G' + rnd();
-  const { row } = await api(page).post('/e/properties', { id: crypto.randomUUID(), deal: 'rent', type: 'house', wilaya_code: 'NKW', moughataa_code: 'TVZ', lot_number: lot });
+  const owner = (await api(page).post('/e/people', { id: crypto.randomUUID(), name: 'مالك سري ' + lot, notes: 'ملاحظة-عميل-سرية' })).row;
+  await api(page).post('/e/phones', { id: crypto.randomUUID(), person_id: owner.id, raw: '46998877', whatsapp: 1 });
+  const { row } = await api(page).post('/e/properties', { id: crypto.randomUUID(), deal: 'rent', type: 'house', wilaya_code: 'NKW', moughataa_code: 'TVZ', lot_number: lot, owner_person_id: owner.id, internal_notes: 'ملاحظة-داخلية-' + lot });
   const jpeg = await sharp({ create: { width: 800, height: 600, channels: 3, background: '#c96' } }).jpeg().withExif({ IFD0: { Make: 'TestCam', Copyright: 'secret-owner' }, IFD3: { GPSLatitudeRef: 'N', GPSLatitude: '18/1 5/1 0/1', GPSLongitudeRef: 'W', GPSLongitude: '15/1 58/1 0/1' } }).toBuffer();
   expect((await sharp(jpeg).metadata()).exif).toBeTruthy();
   await page.goto('/admin/#/properties/' + row.id);
   await page.locator('input[type=file][accept*="image"]').first().setInputFiles({ name: 'p.jpg', mimeType: 'image/jpeg', buffer: jpeg });
   await expect(page.locator('.photos img, .photo img').first()).toBeVisible({ timeout: 15000 });
   await waitSaved(page);
-  await page.getByRole('button', { name: /النشر على الموقع/ }).click();
   await page.getByRole('button', { name: 'انشر على الموقع' }).click();
-  await expect(page.getByRole('button', { name: 'سحب النشر' })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByRole('button', { name: 'إلغاء النشر' })).toBeVisible({ timeout: 15000 });
   const listing = await (await page.request.get('/p/' + row.ref)).text();
+  // بيانات المالك والملاحظات الخاصة لا تصل إلى الصفحة العامة ولا إلى بحث الزوار
+  for (const secret of ['46998877', 'مالك سري', 'ملاحظة-عميل-سرية', 'ملاحظة-داخلية-']) expect(listing).not.toContain(secret);
+  const home = await (await page.request.get('/?q=' + encodeURIComponent('مالك سري'))).text();
+  expect(home).not.toContain(row.ref);
   const src = listing.match(/\/media\/[^"' )]+\.webp/)[0];
   const img = await (await page.request.get(src)).body();
   const meta = await sharp(img).metadata();
@@ -292,4 +298,80 @@ test('معاينة اليوم ← تظهر في «اليوم» ← تسجيل ا
   const a = tables.appointments.find((x) => x.place === place);
   expect(a.status).toBe('done');
   expect(tables.activities.some((x) => x.body.includes('أعجبه الموقع'))).toBeTruthy();
+});
+
+test('الخانات تتبع نوع العقار والعملية، وغير المناسب يُفرَّغ ولا يمنع الحفظ', async ({ page }) => {
+  await login(page);
+  await page.goto('/admin/#/properties/new');
+  const rooms = page.getByLabel('عدد الغرف');
+  const lotF = page.getByLabel('رقم القطعة (النمرة)');
+  // بلا نوع: الخانات العامة فقط
+  await expect(page.getByLabel('المساحة بالمتر المربع')).toBeVisible();
+  await expect(page.getByLabel('المساحة من')).toHaveCount(0);
+  await expect(rooms).toHaveCount(0);
+  // دار للبيع: الغرف والنمرة
+  await page.getByRole('radio', { name: 'بيع' }).click();
+  await page.getByRole('button', { name: 'دار', exact: true }).click();
+  await expect(rooms).toBeVisible();
+  await expect(lotF).toBeVisible();
+  await rooms.fill('4');
+  await lotF.fill('77');
+  await page.getByText('تفاصيل إضافية').click();
+  await expect(page.getByLabel('الحمامات')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'مفروشة' })).toBeVisible();
+  // تحويلها إلى أرض: تختفي بيانات الدار وتُفرَّغ
+  await page.getByRole('button', { name: 'قطعة أرض' }).click();
+  await expect(rooms).toHaveCount(0);
+  await expect(page.getByLabel('الحمامات')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'مفروشة' })).toHaveCount(0);
+  await expect(lotF).toHaveValue('77');
+  // شقة للإيجار: لا نمرة، والسعر شهري
+  await page.getByRole('button', { name: 'شقة' }).click();
+  await page.getByRole('radio', { name: 'إيجار' }).click();
+  await expect(lotF).toHaveCount(0);
+  await expect(rooms).toBeVisible();
+  await expect(rooms).toHaveValue('');
+  await expect(page.locator('legend', { hasText: 'شهري' })).toBeVisible();
+  // الولاية تحصر المقاطعات فيها
+  await page.getByLabel('الولاية').selectOption({ label: 'نواكشوط الغربية' });
+  const opts = await page.getByLabel('المقاطعة').locator('option').allTextContents();
+  expect(opts).toContain('تفرغ زينة');
+  expect(opts).not.toContain('توجنين');
+  await page.getByRole('button', { name: 'حفظ العرض' }).click();
+  await expect(page).toHaveURL(/#\/properties\/[0-9a-f-]{36}/);
+  await waitSaved(page);
+  const id = page.url().split('/').pop();
+  const row = (await api(page).get('/e/properties/' + id)).row;
+  expect(row.type).toBe('apartment');
+  expect(row.bedrooms).toBeNull();
+  expect(row.lot_number || '').toBe('');
+  expect(row.price_basis).toBe('monthly');
+
+  // الطلب: مساحة واحدة، والغرف للأنواع السكنية فقط
+  await page.goto('/admin/#/requests/new');
+  await expect(page.getByLabel('عدد الغرف (على الأقل)')).toHaveCount(0);
+  await page.getByRole('button', { name: 'فيلا' }).click();
+  await page.getByLabel('عدد الغرف (على الأقل)').fill('5');
+  await page.getByLabel('المساحة بالمتر المربع').fill('400');
+  await page.getByRole('button', { name: 'فيلا' }).click();
+  await page.getByRole('button', { name: 'قطعة أرض' }).click();
+  await expect(page.getByLabel('عدد الغرف (على الأقل)')).toHaveCount(0);
+  await page.getByRole('button', { name: 'حفظ الطلب' }).click();
+  await expect(page).toHaveURL(/#\/requests\/[0-9a-f-]{36}/);
+  await waitSaved(page);
+  const rid = page.url().split('/').pop();
+  const req = (await api(page).get('/e/requests/' + rid)).row;
+  expect(req.area_min).toBe(400);
+  expect(req.area_max).toBe(400);
+  expect(req.bedrooms_min).toBeNull();
+  expect(req.types).toEqual(['land']);
+});
+
+test('حفظ عرض فارغ تماماً مسموح ويبقى مسودة', async ({ page }) => {
+  await login(page);
+  await page.goto('/admin/#/properties/new');
+  await page.getByRole('button', { name: 'حفظ العرض' }).click();
+  await expect(page).toHaveURL(/#\/properties\/[0-9a-f-]{36}/);
+  await expect(page.locator('.pub-status')).toContainText('مسودة');
+  await expect(page.getByRole('link', { name: 'أكمل البيانات' })).toBeVisible();
 });
