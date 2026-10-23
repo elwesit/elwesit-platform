@@ -238,9 +238,13 @@ async function send(op) {
   }
 }
 
+// طلب سحب أثناء سحب جارٍ يُعاد بعده، حتى لا تفوت سجلاتٌ أُنشئت بعد بدء السحب الأول
+let pullAgain = false;
 export async function pull() {
-  if (state.auth !== 'in' || state.syncing) return;
+  if (state.auth !== 'in') return;
+  if (state.syncing) { pullAgain = true; return; }
   set({ syncing: true });
+  pullAgain = false;
   try {
     const since = state.lastSync ? new Date(Date.parse(state.lastSync) - 5000).toISOString() : '';
     const r = await api('GET', '/sync?since=' + encodeURIComponent(since));
@@ -254,6 +258,7 @@ export async function pull() {
       server[t] = cur;
     }
     set({ server, lastSync: r.data.server_time, syncing: false, online: true, syncError: null });
+    if (pullAgain) { pullAgain = false; return pull(); }
   } catch (e) {
     set({ syncing: false, online: navigator.onLine ? state.online : false, syncError: e.message === 'Failed to fetch' ? 'لا يوجد اتصال' : e.message });
   }

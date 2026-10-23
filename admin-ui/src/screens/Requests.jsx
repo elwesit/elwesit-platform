@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useTable, useRow, create, update, archive, useStore, storeSnapshot } from '../data.js';
 import { Btn, Field, Input, NumInput, Select, Seg, Chips, TextArea, Sheet, Section, Empty, KindTag, Pending, Icon, LinkBtn, useToast } from '../ui.jsx';
-import { PersonPicker, PriceFields, NextStep, ContactActions, Timeline, SplitLayout, useSettings } from '../components.jsx';
+import { Missing, PersonPicker, PriceFields, NextStep, ContactActions, Timeline, SplitLayout, useSettings } from '../components.jsx';
 import { TYPES, DEALS, REQUEST_STATUS, PRIORITY, SENT_RESPONSE } from '@shared/vocab.js';
 import { matchRequestProperty, rankMatches, LEVEL_LABEL } from '@shared/matching.js';
 import { personLabel, price, locLabel, propertyTitle, geoLabel, fmtDate, shareText, primaryPhone, waUrl, ago } from '../fmt.js';
@@ -16,7 +16,7 @@ export default function Requests({ route, wide }) {
   if (id && route.parts[2] === 'edit') return <EditWrap id={id} />;
   return <SplitLayout wide={wide} hasDetail={!!id} list={<RequestList selected={id} />} detail={id && <RequestDetail id={id} tab={route.query.tab} />} />;
 }
-function EditWrap({ id }) { const r = useRow('requests', id); return r ? <RequestForm initial={r} onDone={() => go('requests/' + id)} /> : <Empty title="غير موجود" />; }
+function EditWrap({ id }) { const r = useRow('requests', id); return r ? <RequestForm initial={r} onDone={() => go('requests/' + id)} /> : <Missing title="غير موجود" />; }
 
 export function requestSummary(r) {
   return [DEALS[r.deal], (r.types || []).map((t) => TYPES[t]).join(' أو '), (r.locations || []).map(locLabel).filter(Boolean).join('، '), r.budget_max != null ? 'حتى ' + price(r.budget_max, r.budget_currency, r.budget_basis) : r.budget_raw, r.area_min != null || r.area_max != null ? (r.area_min == null || r.area_max == null || r.area_min === r.area_max ? `${r.area_max ?? r.area_min} م²` : `${r.area_min}–${r.area_max} م²`) : ''].filter(Boolean).join(' · ');
@@ -53,7 +53,7 @@ function RequestList({ selected }) {
 
 function RequestDetail({ id, tab }) {
   const r = useRow('requests', id);
-  if (!r) return <Empty title="الطلب غير موجود" />;
+  if (!r) return <Missing title="الطلب غير موجود" />;
   return <div className="page detail">
     <div className="detail-head">
       <button className="icon-btn back-btn" onClick={() => back('requests')} aria-label="رجوع"><Icon name="back" /></button>

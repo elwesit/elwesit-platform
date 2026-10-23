@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useTable, useRow, create, update, archive, table } from '../data.js';
 import { Btn, Field, Input, NumInput, Select, Seg, TextArea, Sheet, Section, Empty, KindTag, Pending, Icon, LinkBtn, useToast } from '../ui.jsx';
-import { PersonPicker, ContactActions, Timeline, SplitLayout, Postpone, TaskSheet } from '../components.jsx';
+import { Missing, PersonPicker, ContactActions, Timeline, SplitLayout, Postpone, TaskSheet } from '../components.jsx';
 import { APPT_KINDS, APPT_STATUS } from '@shared/vocab.js';
 import { fmtDateTime, fmtDate, fmtTime, relDay, personLabel, propertyTitle, toLocalInput, fromLocalInput, icsFor, daysFrom } from '../fmt.js';
 import { href, go, back } from '../router.js';
@@ -12,7 +12,7 @@ export default function Appointments({ route, wide }) {
   if (id && route.parts[2] === 'edit') return <EditWrap id={id} />;
   return <SplitLayout wide={wide} hasDetail={!!id} list={<ApptList selected={id} tab={route.query.tab} />} detail={id && <ApptDetail id={id} />} />;
 }
-function EditWrap({ id }) { const a = useRow('appointments', id); return a ? <ApptForm initial={a} onDone={() => go('appointments/' + id)} /> : <Empty title="غير موجود" />; }
+function EditWrap({ id }) { const a = useRow('appointments', id); return a ? <ApptForm initial={a} onDone={() => go('appointments/' + id)} /> : <Missing title="غير موجود" />; }
 
 function ApptList({ selected, tab: tab0 }) {
   const appts = useTable('appointments');
@@ -58,7 +58,7 @@ function ApptList({ selected, tab: tab0 }) {
 function ApptDetail({ id }) {
   const a = useRow('appointments', id);
   const [outcome, setOutcome] = useState(false);
-  if (!a) return <Empty title="غير موجود" />;
+  if (!a) return <Missing title="غير موجود" />;
   const p = a.property_id && table('properties').find((x) => x.id === a.property_id);
   const title = `${APPT_KINDS[a.kind]}${personLabel(a.person_id) ? ' مع ' + personLabel(a.person_id) : ''}${p ? ' — ' + p.ref : ''}`;
   return <div className="page detail">

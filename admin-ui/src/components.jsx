@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useTable, create, update, archive, uploadFile, fileUrl, blobGet, storeSnapshot, getRow, useStore, uuid } from './data.js';
-import { Btn, Field, Input, NumInput, Select, Seg, Sheet, Icon, TextArea, useToast, LinkBtn, Section } from './ui.jsx';
+import { Btn, Field, Input, NumInput, Select, Seg, Sheet, Icon, TextArea, useToast, LinkBtn, Section, Empty } from './ui.jsx';
 import { personLabel, phonesOf, waUrl, telUrl, displayPhone, fmtDateTime, relDay, daysFrom, toLocalInput, fromLocalInput, ago, fmtTime } from './fmt.js';
 import { personDuplicates } from '@shared/search.js';
 import { currencyReadings, formatAmountWords, PRICE_BASIS } from '@shared/money.js';
@@ -295,4 +295,10 @@ export function useSettings() { return useStore().settings || {}; }
 export function SplitLayout({ wide, list, detail, hasDetail }) {
   if (!wide) return hasDetail ? detail : list;
   return <div className="split"><div className="split-list">{list}</div><div className="split-detail">{hasDetail ? detail : <div className="split-empty muted">اختر عنصراً من القائمة</div>}</div></div>;
+}
+
+// سجل غير موجود محلياً: أثناء المزامنة قد يكون أُنشئ للتو على جهاز آخر، فلا نقول «غير موجود» قبل انتهائها
+export function Missing({ title = 'غير موجود' }) {
+  const s = useStore();
+  return s.syncing ? <Empty title="جارٍ التحميل…" /> : <Empty title={title} />;
 }

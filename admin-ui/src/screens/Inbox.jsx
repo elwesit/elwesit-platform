@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useTable, useRow, update, call, useStore, uuid, table } from '../data.js';
 import { Btn, Field, Input, Select, Seg, Sheet, Section, Empty, KindTag, Icon, LinkBtn, useToast } from '../ui.jsx';
-import { SplitLayout, Photos, PersonPicker } from '../components.jsx';
+import { Missing, SplitLayout, Photos, PersonPicker } from '../components.jsx';
 import { RequestForm } from './Requests.jsx';
 import { INBOX_KINDS, INBOX_SOURCES, TYPES, DEALS } from '@shared/vocab.js';
 import { parseCapture, buildGazetteer } from '@shared/capture.js';
@@ -38,7 +38,7 @@ function InboxDetail({ id }) {
   const [convert, setConvert] = useState(null);
   const phones = useTable('phones');
   useEffect(() => { if (m?.status === 'new' && !m._pending) update('inbox', id, { status: 'seen' }); }, [id, m?.status]); // eslint-disable-line
-  if (!m) return <Empty title="غير موجود" />;
+  if (!m) return <Missing title="غير موجود" />;
   const p = m.payload || {};
   const known = phones.find((x) => x.normalized === m.phone_norm && !x.archived_at);
   const prop = m.property_ref && table('properties').find((x) => x.ref === m.property_ref);

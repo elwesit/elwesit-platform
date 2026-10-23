@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { useTable, useRow, create, update, archive, call, api, storeSnapshot, useStore, getState, table } from '../data.js';
 import { fieldsFor, cleanupFor } from '@shared/typeFields.js';
 import { Btn, Field, Input, NumInput, Select, Seg, Chips, Toggle, TextArea, Sheet, Section, Empty, KindTag, Pending, Icon, LinkBtn, useToast, Confirm } from '../ui.jsx';
-import { PersonPicker, GeoFields, PriceFields, NextStep, ContactActions, Timeline, Photos, InfoRow, SplitLayout, useSettings, loadLeaflet, tileLayer, pinIcon } from '../components.jsx';
+import { Missing, PersonPicker, GeoFields, PriceFields, NextStep, ContactActions, Timeline, Photos, InfoRow, SplitLayout, useSettings, loadLeaflet, tileLayer, pinIcon } from '../components.jsx';
 import MapPicker from '../MapPicker.jsx';
 import { TYPES, DEALS, AVAILABILITY, FEATURES, SENT_RESPONSE } from '@shared/vocab.js';
 import { geoLabel, price, ago, propertyTitle, personLabel, shareText, fmtDate, waUrl, primaryPhone, toDateInput, fromDateInput, fillTemplate, locLabel } from '../fmt.js';
@@ -24,7 +24,7 @@ export default function Properties({ route, wide }) {
 
 function EditWrapper({ id }) {
   const p = useRow('properties', id);
-  if (!p) return <Empty title="غير موجود" />;
+  if (!p) return <Missing title="غير موجود" />;
   return <PropertyForm initial={p} onDone={() => go('properties/' + id)} />;
 }
 
@@ -87,7 +87,7 @@ function PropertyDetail({ id, tab }) {
   const [showMap, setShowMap] = useState(false);
   const [share, setShare] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState(false);
-  if (!p) return <Empty title="العرض غير موجود" />;
+  if (!p) return <Missing title="العرض غير موجود" />;
   const age = verifiedAge(p);
   const staleDays = settings.stale_days || STALE;
   const srcs = sources.filter((s) => s.property_id === id && !s.archived_at);

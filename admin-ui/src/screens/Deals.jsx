@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useTable, useRow, create, update, archive, table } from '../data.js';
 import { Btn, Field, Input, NumInput, Select, Seg, TextArea, Sheet, Section, Empty, KindTag, Pending, Icon, LinkBtn, useToast } from '../ui.jsx';
-import { PersonPicker, NextStep, Timeline, SplitLayout, Photos, ContactActions } from '../components.jsx';
+import { Missing, PersonPicker, NextStep, Timeline, SplitLayout, Photos, ContactActions } from '../components.jsx';
 import { DEAL_STAGES } from '@shared/vocab.js';
 import { CURRENCIES, formatAmountWords } from '@shared/money.js';
 import { personLabel, propertyTitle, fmtDate, price, toDateInput, fromDateInput, ago } from '../fmt.js';
@@ -56,7 +56,7 @@ function DealDetail({ id }) {
   const d = useRow('deals', id);
   const [lost, setLost] = useState(false);
   const [edit, setEdit] = useState(false);
-  if (!d) return <Empty title="غير موجود" />;
+  if (!d) return <Missing title="غير موجود" />;
   const p = d.property_id && table('properties').find((x) => x.id === d.property_id);
   const setStage = (st) => {
     if (st === 'lost') { setLost(true); return; }

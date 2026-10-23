@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useTable, useRow, create, update, archive, call, storeSnapshot, useStore } from '../data.js';
 import { Btn, Field, Input, Select, TextArea, Sheet, Section, Empty, KindTag, Pending, Icon, LinkBtn, useToast, Toggle, Confirm } from '../ui.jsx';
-import { NextStep, ContactActions, Timeline, RolesPicker, SplitLayout, Photos } from '../components.jsx';
+import { Missing, NextStep, ContactActions, Timeline, RolesPicker, SplitLayout, Photos } from '../components.jsx';
 import { ROLES, PRIORITY, REQUEST_STATUS, DEAL_STAGES, APPT_STATUS } from '@shared/vocab.js';
 import { personDuplicates } from '@shared/search.js';
 import { phonesOf, displayPhone, propertyTitle, fmtDateTime, ago, normalizePhone } from '../fmt.js';
@@ -76,7 +76,7 @@ function PersonDetail({ id }) {
   const [edit, setEdit] = useState(false);
   const [merge, setMerge] = useState(false);
   const dups = useMemo(() => p ? personDuplicates(storeSnapshot(), { name: p.name, phone: phonesOf(id)[0]?.raw, excludeId: id }) : [], [p, id]);
-  if (!p) return <Empty title="غير موجود" />;
+  if (!p) return <Missing title="غير موجود" />;
   if (p.merged_into) return <div className="page"><p>دُمج هذا السجل في <a href={href('people/' + p.merged_into)}>سجل آخر</a>.</p></div>;
   const myReqs = reqs.filter((r) => r.person_id === id && !r.archived_at);
   const owned = props.filter((x) => x.owner_person_id === id && !x.archived_at);
