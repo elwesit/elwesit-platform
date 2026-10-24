@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { findGeoViewports, lotLabels, homography, applyH } from '../../shared/geopdf.js';
+import { findGeoViewports, lotLabels, homography, applyH, twoPointGeo } from '../../shared/geopdf.js';
 import { hitTag, hitPlanCount } from '../../shared/plans.js';
 import { makeGeoPdf } from '../fixtures-geopdf.js';
 
@@ -41,4 +41,20 @@ test('hit tags tell repeated numbers in one plan apart', () => {
   assert.equal(hitPlanCount(hits), 2);
   assert.equal(hitTag(hits, 1), ' · موضع 2 من 2');
   assert.equal(hitTag(hits, 2), '');
+});
+
+test('twoPointGeo maps both reference points and keeps scale and rotation', () => {
+  const A = [100, 200]; const B = [900, 200];
+  const gA = [18.1, -15.98]; const gB = [18.1, -15.98 + 400 / (111320 * Math.cos(18.1 * Math.PI / 180))];
+  const t = twoPointGeo(A, B, gA, gB);
+  t.toGeo(...A).forEach((v, i) => assert.ok(Math.abs(v - gA[i]) < 1e-9));
+  t.toGeo(...B).forEach((v, i) => assert.ok(Math.abs(v - gB[i]) < 1e-9));
+  assert.ok(Math.abs(t.metersPerPx - 0.5) < 1e-6);
+  // 200 بكسل للأسفل في الصورة = 100 م جنوباً
+  const [lat] = t.toGeo(100, 400);
+  assert.ok(Math.abs((gA[0] - lat) * 111320 - 100) < 1e-6);
+  // صورة مدوّرة 90°: B فوق A في الصورة لكنه شرقه على الأرض
+  const r = twoPointGeo([0, 1000], [0, 200], gA, gB);
+  assert.ok(Math.abs(r.rotationDeg + 90) < 1e-6);
+  assert.equal(twoPointGeo([0, 0], [3, 4], gA, gB), null);
 });
