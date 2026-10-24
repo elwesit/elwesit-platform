@@ -90,7 +90,8 @@ async function renderPage(page, corners) {
 
 // صورة مخطط بلا إحداثيات (PDF ممسوح أو صورة): تُرسم على canvas ليضبطها المستخدم بنقطتين
 export async function renderPlanSource(file) {
-  if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
+  const head = String.fromCharCode(...new Uint8Array(await file.slice(0, 5).arrayBuffer()));
+  if (head === '%PDF-' || /\.pdf$/i.test(file.name) || file.type === 'application/pdf') {
     const pdfjs = await loadPdfjs();
     const task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()), verbosity: 0 });
     try { return trimWhite((await renderPage(await (await task.promise).getPage(1))).canvas); } finally { task.destroy(); }

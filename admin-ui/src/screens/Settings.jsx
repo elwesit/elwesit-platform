@@ -117,7 +117,9 @@ function Plans() {
     let ok = 0;
     const items = [];
     for (const file of files) {
-      if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') { items.push({ file, pdf: true }); continue; }
+      // بلا تقييد للنوع في المنتقي: بعض الهواتف تخفي ملفات PDF أو تعطيها اسماً بلا امتداد، فنتعرف عليها من محتواها
+      const head = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+      if (String.fromCharCode(...head) === '%PDF-' || /\.pdf$/i.test(file.name) || file.type === 'application/pdf') { items.push({ file, pdf: true }); continue; }
       if (/^image\//.test(file.type) || /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)) { setToAlign((a) => [...a, file]); continue; }
       try { for (const d of splitPlanFile(await file.text())) items.push({ file, d }); } catch (e) { toast(`${file.name}: ${e.message}`, 'err'); }
     }
@@ -169,7 +171,7 @@ function Plans() {
       <Btn small kind="ghost" onClick={() => setDel(p)}>حذف</Btn>
     </div>)}
     <div className="row-actions">
-      <label className={`btn btn-default upload-btn${busy ? ' disabled' : ''}`}>{busy ? (typeof busy === 'string' ? busy : 'جارٍ الاستيراد…') : 'إضافة مخطط (PDF)'}<input type="file" multiple hidden accept="application/pdf,.pdf,image/*,.json,application/json" disabled={busy} onChange={(e) => { importFiles([...e.target.files]); e.target.value = ''; }} /></label>
+      <label className={`btn btn-default upload-btn${busy ? ' disabled' : ''}`}>{busy ? (typeof busy === 'string' ? busy : 'جارٍ الاستيراد…') : 'إضافة مخطط (PDF)'}<input type="file" multiple hidden disabled={busy} onChange={(e) => { importFiles([...e.target.files]); e.target.value = ''; }} /></label>
     </div>
     {toAlign.length > 0 && <React.Suspense fallback={null}><PlanAlign key={toAlign[0].name + toAlign.length} file={toAlign[0]} onDone={aligned} onClose={() => setToAlign((a) => a.slice(1))} /></React.Suspense>}
     {del && <Sheet title="حذف المخطط" onClose={() => setDel(null)} footer={<><Btn onClick={() => setDel(null)}>إلغاء</Btn><Btn kind="primary" onClick={() => { archive('plans', del.id); setDel(null); }}>حذف</Btn></>}>
