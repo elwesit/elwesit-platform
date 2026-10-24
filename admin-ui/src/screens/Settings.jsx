@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useStore, saveSettings, useTable, create, update, archive, api, logout, loadSettings, uploadFile, fileUrl, uuid } from '../data.js';
+import { NKC_ZONES } from '@shared/nouakchottZones.js';
 import { parsePlanPackage, splitPlanFile, planLabel } from '@shared/plans.js';
 import { Btn, Field, Input, NumInput, TextArea, Section, Seg, Select, useToast, Sheet, LinkBtn, Icon } from '../ui.jsx';
 import { href } from '../router.js';
@@ -103,10 +104,23 @@ function Areas() {
 function Plans() {
   const plans = useTable('plans').filter((p) => !p.archived_at).sort((a, b) => (a.lotissement || a.name).localeCompare(b.lotissement || b.name));
   const moughataas = useTable('moughataas');
+  const areas = useTable('areas').filter((a) => !a.archived_at && a.kind !== 'landmark');
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [del, setDel] = useState(null);
   const [ren, setRen] = useState(null);
+  const mName = (c) => moughataas.find((m) => m.code === c)?.name_ar;
+  const aName = (id) => areas.find((a) => a.id === id)?.name;
+  // تعديل الاسم والمقاطعة والمنطقة؛ المنطقة الجديدة تُنشأ حياً، ولا تُنسب إلى المقاطعة إلا بعد التأكيد
+  const saveRen = () => {
+    let area_id = ren.area_id === '+' ? null : ren.area_id || null;
+    if (ren.area_id === '+' && ren.new_area?.trim()) {
+      area_id = uuid();
+      create('areas', { id: area_id, name: ren.new_area.trim(), kind: 'area', aliases: [], moughataa_code: ren.place_verified ? ren.moughataa_code || null : null, wilaya_code: ren.place_verified ? moughataas.find((m) => m.code === ren.moughataa_code)?.wilaya_code || null : null });
+    }
+    update('plans', ren.id, { name: ren.name.trim(), lotissement: ren.name.trim(), moughataa_code: ren.moughataa_code || null, area_id, place_verified: ren.place_verified ? 1 : 0 });
+    setRen(null);
+  };
   const [toAlign, setToAlign] = useState([]); // ملفات بلا إحداثيات تنتظر الضبط بنقطتين
   const savePlan = async (row, image) => {
     const id = uuid();
@@ -174,21 +188,25 @@ function Plans() {
     {plans.map((p) => <div key={p.id} className="plan-row">
       <div>
         <b>{p.name || planLabel(p)}</b>
-        <small className="muted block">{[p.lotissement, moughataas.find((m) => m.code === p.moughataa_code)?.name_ar, p.lots?.length ? `${p.lots.length} قطعة${p.lots.some((l) => l[4]) ? `، ${p.lots.filter((l) => l[4]).length} بحدودها` : ''}` : 'بلا فهرس قطع', p.source_date && `بتاريخ ${p.source_date}`, p.georef === 'geopdf' ? 'إحداثيات من الملف نفسه' : p.georef === 'points' ? 'مضبوط بنقاط مرجعية' : ''].filter(Boolean).join(' · ')}</small>
+        <small className="muted block">{[p.lotissement, mName(p.moughataa_code) && (p.place_verified ? mName(p.moughataa_code) : `${mName(p.moughataa_code)} (غير مؤكدة)`), aName(p.area_id), p.lots?.length ? `${p.lots.length} قطعة${p.lots.some((l) => l[4]) ? `، ${p.lots.filter((l) => l[4]).length} بحدودها` : ''}` : 'بلا فهرس قطع', p.source_date && `بتاريخ ${p.source_date}`, p.georef === 'geopdf' ? 'إحداثيات من الملف نفسه' : p.georef === 'points' ? 'مضبوط بنقاط مرجعية' : ''].filter(Boolean).join(' · ')}</small>
         {p.source_name && <small className="muted block">المصدر: {p.source_name}</small>}
       </div>
       {p.image_file_id && <label className="inline-check"><input type="checkbox" checked={!!p.visible} onChange={(e) => update('plans', p.id, { visible: e.target.checked })} /> يظهر على الخريطة</label>}
       {p.image_file_id && <a className="btn btn-default btn-sm" href={fileUrl({ id: p.image_file_id })} target="_blank" rel="noopener">الصورة</a>}
-      <Btn small kind="ghost" onClick={() => setRen({ id: p.id, name: planLabel(p) })}>الاسم</Btn>
+      <Btn small kind="ghost" onClick={() => setRen({ id: p.id, name: planLabel(p), moughataa_code: p.moughataa_code, area_id: aName(p.area_id) ? p.area_id : null, place_verified: !!p.place_verified })}>تعديل</Btn>
       <Btn small kind="ghost" onClick={() => setDel(p)}>حذف</Btn>
     </div>)}
     <div className="row-actions">
       <label className={`btn btn-default upload-btn${busy ? ' disabled' : ''}`}>{busy ? (typeof busy === 'string' ? busy : 'جارٍ الاستيراد…') : 'إضافة مخطط (PDF)'}<input type="file" multiple hidden disabled={busy} onChange={(e) => { importFiles([...e.target.files]); e.target.value = ''; }} /></label>
     </div>
     {toAlign.length > 0 && <React.Suspense fallback={null}><PlanAlign key={toAlign[0].name + toAlign.length} file={toAlign[0]} onDone={aligned} onClose={() => setToAlign((a) => a.slice(1))} /></React.Suspense>}
-    {ren && <Sheet title="اسم المخطط" onClose={() => setRen(null)} footer={<><Btn onClick={() => setRen(null)}>إلغاء</Btn><Btn kind="primary" disabled={!ren.name.trim()} onClick={() => { update('plans', ren.id, { name: ren.name.trim(), lotissement: ren.name.trim() }); setRen(null); }}>حفظ</Btn></>}>
+    {ren && <Sheet title="بيانات المخطط" onClose={() => setRen(null)} footer={<><Btn onClick={() => setRen(null)}>إلغاء</Btn><Btn kind="primary" disabled={!ren.name.trim() || (ren.area_id === '+' && !ren.new_area?.trim())} onClick={saveRen}>حفظ</Btn></>}>
       <Field label="الاسم كما تبحث به (مثل: المنارة، قطاع 9)"><Input value={ren.name} onChange={(x) => setRen({ ...ren, name: x })} /></Field>
-      <p className="hint">البحث يقبل أيضاً اسم الملف الأصلي واسم المقاطعة.</p>
+      <Field label="المقاطعة"><Select aria-label="المقاطعة" value={ren.moughataa_code} onChange={(x) => setRen({ ...ren, moughataa_code: x, place_verified: false })} placeholder="غير محددة" options={moughataas.filter((m) => NKC_ZONES[m.code]).map((m) => [m.code, m.name_ar])} /></Field>
+      <Field label="المنطقة أو الحي"><Select aria-label="المنطقة أو الحي" value={ren.area_id} onChange={(x) => setRen({ ...ren, area_id: x, place_verified: false })} placeholder="غير محددة" options={[...areas.slice().sort((a, b) => (b.moughataa_code === ren.moughataa_code) - (a.moughataa_code === ren.moughataa_code) || a.name.localeCompare(b.name, 'ar')).map((a) => [a.id, a.moughataa_code && a.moughataa_code !== ren.moughataa_code ? `${a.name} (${mName(a.moughataa_code)})` : a.name]), ['+', 'منطقة جديدة…']]} /></Field>
+      {ren.area_id === '+' && <Field label="اسم المنطقة الجديدة"><Input value={ren.new_area || ''} onChange={(x) => setRen({ ...ren, new_area: x })} /></Field>}
+      <label className="inline-check"><input type="checkbox" checked={!!ren.place_verified} onChange={(e) => setRen({ ...ren, place_verified: e.target.checked })} /> تحققت أن المخطط يتبع هذه المقاطعة والمنطقة</label>
+      <p className="hint">المقاطعة تُقترح من موقع المخطط على الخريطة وتبقى «غير مؤكدة» حتى تؤكدها. البحث بالخانات يعرض المخطط تحت المقاطعة والمنطقة المختارتين هنا.</p>
     </Sheet>}
     {del && <Sheet title="حذف المخطط" onClose={() => setDel(null)} footer={<><Btn onClick={() => setDel(null)}>إلغاء</Btn><Btn kind="primary" onClick={() => { archive('plans', del.id); setDel(null); }}>حذف</Btn></>}>
       <p>حذف «{del.name || planLabel(del)}» من الخريطة والبحث؟ مواقع العروض التي وُضعت منه تبقى كما هي.</p>

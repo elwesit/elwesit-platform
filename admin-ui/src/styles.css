@@ -393,3 +393,12 @@ textarea { resize: vertical; }
 @media (prefers-color-scheme: dark) { .no-photos { background: #2e2817; border-color: #574a25; } }
 .no-photos .np-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .photos + .btn { margin-top: 8px; }
+.lot-search { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; align-items: end; }
+.lot-search .field { margin: 0; min-width: 0; }
+.lot-search select, .lot-search input { width: 100%; min-width: 0; }
+.lot-search .lot-row { display: flex; gap: 6px; }
+.lot-search .lot-row input { flex: 1; }
+@media (max-width: 720px) { .lot-search { grid-template-columns: 1fr 1fr; } .lot-search .lot-field { grid-column: 1 / -1; } }
+.tag.prec-plan { background: #efe7f8; color: #4a2a7a; }
+.tag.prec-label, .tag.prec-approx { background: #fbf0d6; color: #7a5a00; }
+@media (prefers-color-scheme: dark) { .tag.prec-plan { background: #3a2c50; color: #e3d3fb; } .tag.prec-label, .tag.prec-approx { background: #4a3c14; color: #f6dd9a; } }
