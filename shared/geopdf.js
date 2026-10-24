@@ -94,3 +94,21 @@ export function lotLabels(items, bbox) {
   }
   return best;
 }
+
+// ضبط مخطط بلا إحداثيات بنقطتين: نقطتان على الصورة (بكسل، y للأسفل) ومقابلهما على الخريطة [lat,lng]
+// تحويل تشابه (إزاحة + دوران + مقياس واحد) يناسب الصور الجوية والمخططات المرسومة بمقياس
+export function twoPointGeo(imgA, imgB, geoA, geoB) {
+  const lat0 = geoA[0]; const lng0 = geoA[1];
+  const ky = 111320; const kx = 111320 * Math.cos(lat0 * Math.PI / 180);
+  const ix = imgB[0] - imgA[0]; const iy = -(imgB[1] - imgA[1]);
+  const gx = (geoB[1] - lng0) * kx; const gy = (geoB[0] - lat0) * ky;
+  const n = ix * ix + iy * iy;
+  if (n < 400 || Math.hypot(gx, gy) < 10) return null; // النقطتان متقاربتان جداً
+  // a = g / i (أعداد مركبة)
+  const ar = (gx * ix + gy * iy) / n; const ai = (gy * ix - gx * iy) / n;
+  const toGeo = (px, py) => {
+    const x = px - imgA[0]; const y = -(py - imgA[1]);
+    return [lat0 + (ar * y + ai * x) / ky, lng0 + (ar * x - ai * y) / kx];
+  };
+  return { toGeo, metersPerPx: Math.hypot(ar, ai), rotationDeg: Math.atan2(ai, ar) * 180 / Math.PI };
+}

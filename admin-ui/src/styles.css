@@ -384,3 +384,6 @@ textarea { resize: vertical; }
 .opacity-ctl { margin-top: 6px; gap: 8px; }
 .plan-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .plan-row > div { flex: 1; min-width: 180px; }
+.align-pt span { display: flex; width: 26px; height: 26px; border-radius: 50%; color: #fff; font-weight: 700; align-items: center; justify-content: center; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+.map-align { height: 58vh; }
+.align-hint { font-weight: 600; }

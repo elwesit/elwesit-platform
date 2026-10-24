@@ -457,15 +457,39 @@ test('مخططات التجزئة: استيراد حزمة ← رقم القطع
   await expect(page.locator('.plan-row', { hasText: lotissement })).toHaveCount(0);
 });
 
-test('إضافة مخطط PDF بإحداثياته من الهاتف: يُضبط على الخريطة وتُستخرج أرقام قطعه', async ({ page }) => {
+test('إضافة مخطط PDF من الهاتف: الممسوح يُضبط بنقطتين، وذو الإحداثيات يُضبط وحده وتُستخرج أرقام قطعه', async ({ page }) => {
   const tag = rnd();
   await login(page);
   await page.goto('/admin/#/settings?tab=plans');
   const input = page.locator('.upload-btn input[type=file]');
-  // ملف بلا إحداثيات: رسالة واضحة ولا شيء يُضاف
+  // ملف ممسوح بلا إحداثيات: يُضبط بنقطتين (على المخطط ثم على الخريطة)
   await input.setInputFiles({ name: `scan-${tag}.pdf`, mimeType: 'application/pdf', buffer: makeGeoPdf({ geo: false }) });
-  await expect(page.getByRole('status')).toContainText('لا يحمل إحداثيات');
-  await expect(page.locator('.plan-row', { hasText: `scan-${tag}` })).toHaveCount(0);
+  const sheet = page.getByRole('dialog', { name: new RegExp(`ضبط المخطط: scan-${tag}`) });
+  await expect(sheet).toContainText('المس النقطة أ', { timeout: 20000 });
+  const m = sheet.locator('.map-align');
+  const box = await m.boundingBox();
+  await m.click({ position: { x: box.width * 0.3, y: box.height * 0.3 } });
+  await expect(sheet).toContainText('المس النقطة ب');
+  await m.click({ position: { x: box.width * 0.7, y: box.height * 0.7 } });
+  await expect(sheet.locator('.align-pt')).toHaveCount(2);
+  await sheet.getByRole('button', { name: 'التالي' }).click();
+  await expect(sheet).toContainText('على الخريطة: المس مكان النقطة أ');
+  await m.click({ position: { x: box.width * 0.35, y: box.height * 0.35 } });
+  await m.click({ position: { x: box.width * 0.65, y: box.height * 0.65 } });
+  await sheet.getByRole('button', { name: 'اعرض النتيجة' }).click();
+  await expect(sheet).toContainText('لكل بكسل');
+  await expect(sheet.locator('img.leaflet-image-layer')).not.toHaveCount(0);
+  await sheet.getByLabel('اسم المخطط').fill(`قطاع ممسوح ${tag}`);
+  await sheet.getByRole('button', { name: 'حفظ المخطط' }).click();
+  const scanRow = page.locator('.plan-row', { hasText: `قطاع ممسوح ${tag}` });
+  await expect(scanRow).toContainText('مضبوط بنقاط مرجعية');
+  await waitSaved(page);
+  const scanPlan = (await api(page).get('/sync')).data.plans.find((p) => p.name === `قطاع ممسوح ${tag}`);
+  expect(scanPlan.georef).toBe('points'); expect(scanPlan.north).toBeGreaterThan(scanPlan.south);
+  expect((await page.request.get('/api/admin/files/' + scanPlan.image_file_id)).status()).toBe(200);
+  await scanRow.getByRole('button', { name: 'حذف' }).click();
+  await page.locator('.sheet, [role=dialog]').last().getByRole('button', { name: 'حذف' }).click();
+  await expect(scanRow).toHaveCount(0);
 
   await input.setInputFiles({ name: `Lotissement_${tag}.pdf`, mimeType: 'application/pdf', buffer: makeGeoPdf({ first: 9101 }) });
   const row = page.locator('.plan-row', { hasText: `Lotissement ${tag}` });

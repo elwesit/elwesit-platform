@@ -5,6 +5,8 @@ import { Btn, Field, Input, NumInput, TextArea, Section, Seg, Select, useToast, 
 import { href } from '../router.js';
 import { fmtDateTime } from '../fmt.js';
 
+const PlanAlign = React.lazy(() => import('../PlanAlign.jsx'));
+
 export default function Settings({ route }) {
   const s = useStore();
   const [tab, setTab] = useState(route?.query?.tab || 'site');
@@ -104,34 +106,42 @@ function Plans() {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [del, setDel] = useState(null);
+  const [toAlign, setToAlign] = useState([]); // ملفات بلا إحداثيات تنتظر الضبط بنقطتين
+  const savePlan = async (row, image) => {
+    const id = uuid();
+    const image_file_id = image ? await uploadFile(image, { kind: 'document', owner_type: 'plan', owner_id: id }) : null;
+    create('plans', { ...row, id, image_file_id });
+  };
   const importFiles = async (files) => {
     setBusy(true);
     let ok = 0;
     const items = [];
     for (const file of files) {
       if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') { items.push({ file, pdf: true }); continue; }
+      if (/^image\//.test(file.type) || /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)) { setToAlign((a) => [...a, file]); continue; }
       try { for (const d of splitPlanFile(await file.text())) items.push({ file, d }); } catch (e) { toast(`${file.name}: ${e.message}`, 'err'); }
     }
     const seen = [...plans];
     for (const { file, d, pdf } of items) {
       try {
         if (pdf && seen.some((p) => p.source_name === file.name)) { toast(`«${file.name}» مستورد من قبل`, 'err'); continue; }
-        const { row, image } = pdf
-          ? await (await import('../geopdfImport.js')).readGeoPdf(file, (step) => setBusy(`${file.name}: ${step}…`))
-          : parsePlanPackage(d);
+        let parsed;
+        if (pdf) {
+          const g = await import('../geopdfImport.js');
+          try { parsed = await g.readGeoPdf(file, (step) => setBusy(`${file.name}: ${step}…`)); } catch (e) { if (e instanceof g.NoGeoError) { setToAlign((a) => [...a, file]); continue; } throw e; }
+        } else parsed = parsePlanPackage(d);
+        const { row, image } = parsed;
         const dup = seen.find((p) => p.name === row.name && p.lotissement === row.lotissement);
         if (dup) { toast(`«${planLabel(row)}» مستورد من قبل`, 'err'); continue; }
-        const id = uuid();
-        let image_file_id = null;
-        if (image instanceof Blob) image_file_id = await uploadFile(image, { kind: 'document', owner_type: 'plan', owner_id: id });
-        else if (image) {
+        let img = image;
+        if (typeof image === 'string') {
           const [head, b64] = image.split(',');
           const bin = atob(b64); const bytes = new Uint8Array(bin.length);
           for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
           const type = head.slice(5).split(';')[0];
-          image_file_id = await uploadFile(new File([bytes], (row.lotissement || 'plan') + '.' + type.split('/')[1], { type }), { kind: 'document', owner_type: 'plan', owner_id: id });
+          img = new File([bytes], (row.lotissement || 'plan') + '.' + type.split('/')[1], { type });
         }
-        create('plans', { ...row, id, image_file_id });
+        await savePlan(row, img);
         seen.push(row);
         ok++;
         if (pdf) toast(row.lots.length ? `«${planLabel(row)}»: ${row.lots.length} قطعة` : `«${planLabel(row)}»: وُضع على الخريطة، ولم نجد أرقام قطع في نصه`);
@@ -140,8 +150,13 @@ function Plans() {
     setBusy(false);
     if (ok) toast(`استُورد ${ok} مخطط`);
   };
+  const aligned = async ({ row, image }) => {
+    const file = toAlign[0];
+    setToAlign((a) => a.slice(1));
+    try { await savePlan(row, image); toast(`«${planLabel(row)}» وُضع على الخريطة`); } catch (e) { toast(`${file.name}: ${e.message}`, 'err'); }
+  };
   return <Section title="مخططات التجزئة">
-    <p className="hint">اختر ملف PDF المخطط كما خرج من ArcMap أو QGIS (بإحداثياته)، ويمكن اختيار عدة ملفات معاً. كل مخطط يظهر فوق الخريطة في مكانه، وأرقام قطعه قابلة للبحث: اكتب رقم القطعة في العرض فيقترح البرنامج موقعها. المخططات خاصة بك ولا تظهر للزوار.</p>
+    <p className="hint">اختر ملف PDF المخطط كما خرج من ArcMap أو QGIS (بإحداثياته)، ويمكن اختيار عدة ملفات معاً. الملف الممسوح أو الصورة بلا إحداثيات تضبطه بنفسك بنقطتين. كل مخطط يظهر فوق الخريطة في مكانه، وأرقام قطعه قابلة للبحث: اكتب رقم القطعة في العرض فيقترح البرنامج موقعها. المخططات خاصة بك ولا تظهر للزوار.</p>
     {plans.length === 0 && <p className="muted">لا توجد مخططات بعد.</p>}
     {plans.map((p) => <div key={p.id} className="plan-row">
       <div>
@@ -154,8 +169,9 @@ function Plans() {
       <Btn small kind="ghost" onClick={() => setDel(p)}>حذف</Btn>
     </div>)}
     <div className="row-actions">
-      <label className={`btn btn-default upload-btn${busy ? ' disabled' : ''}`}>{busy ? (typeof busy === 'string' ? busy : 'جارٍ الاستيراد…') : 'إضافة مخطط (PDF)'}<input type="file" multiple hidden accept="application/pdf,.pdf,.json,application/json" disabled={busy} onChange={(e) => { importFiles([...e.target.files]); e.target.value = ''; }} /></label>
+      <label className={`btn btn-default upload-btn${busy ? ' disabled' : ''}`}>{busy ? (typeof busy === 'string' ? busy : 'جارٍ الاستيراد…') : 'إضافة مخطط (PDF)'}<input type="file" multiple hidden accept="application/pdf,.pdf,image/*,.json,application/json" disabled={busy} onChange={(e) => { importFiles([...e.target.files]); e.target.value = ''; }} /></label>
     </div>
+    {toAlign.length > 0 && <React.Suspense fallback={null}><PlanAlign key={toAlign[0].name + toAlign.length} file={toAlign[0]} onDone={aligned} onClose={() => setToAlign((a) => a.slice(1))} /></React.Suspense>}
     {del && <Sheet title="حذف المخطط" onClose={() => setDel(null)} footer={<><Btn onClick={() => setDel(null)}>إلغاء</Btn><Btn kind="primary" onClick={() => { archive('plans', del.id); setDel(null); }}>حذف</Btn></>}>
       <p>حذف «{del.name || planLabel(del)}» من الخريطة والبحث؟ مواقع العروض التي وُضعت منه تبقى كما هي.</p>
     </Sheet>}
