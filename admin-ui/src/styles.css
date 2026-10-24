@@ -294,6 +294,9 @@ textarea { resize: vertical; }
 .map-tools .inline-form { flex: 1; margin: 0; min-width: 240px; }
 .pad { padding: 16px; }
 .wpin { background: none; border: 0; }
+/* Leaflet يحسب مواضع العلامات والتسميات من اليسار؛ في صفحة RTL تنزاح التسميات بدون هذا */
+.leaflet-container { direction: ltr; }
+.leaflet-container .leaflet-control-attribution, .leaflet-container .leaflet-popup-content { direction: rtl; }
 .geoms { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
 .geom-item { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: .88rem; }
 
@@ -367,3 +370,9 @@ textarea { resize: vertical; }
 .pub-status.on { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, var(--surface)); }
 .pub-status .pub-label { font-weight: 700; flex: 1 1 200px; }
 .pub-status .pub-label small { display: block; font-weight: 400; color: var(--muted); }
+
+/* مخطط نواكشوط */
+.map-plan { height: calc(100vh - 230px); min-height: 360px; }
+.leaflet-tooltip.zone-label { background: transparent; border: 0; box-shadow: none; color: #0e5a4c; font-weight: 700; font-size: .8rem; text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
+.leaflet-tooltip.zone-label::before { display: none; }
+.leaflet-tooltip.lot-label { padding: 0 5px; font-size: .74rem; font-weight: 600; direction: rtl; }

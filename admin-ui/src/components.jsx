@@ -7,6 +7,7 @@ import { currencyReadings, formatAmountWords, PRICE_BASIS } from '@shared/money.
 import { ACTIVITY_KINDS, ROLES } from '@shared/vocab.js';
 import { href, go } from './router.js';
 import { norm } from '@shared/text.js';
+import { NKC_ZONES } from '@shared/nouakchottZones.js';
 
 // ---------- اختيار شخص (أو إنشاء جديد مع تنبيه التكرار) ----------
 export function PersonPicker({ value, onChange, label = 'الشخص', roles = [], allowNew = true }) {
@@ -283,6 +284,21 @@ export function tileLayer(L, settings) {
   return L.tileLayer(settings?.map_tiles_url || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: settings?.map_tiles_max_zoom || 19, attribution: settings?.map_tiles_attribution || '&copy; OpenStreetMap' });
 }
 export const pinIcon = (L, color = '#0e5a4c') => L.divIcon({ className: 'wpin', html: `<svg viewBox="0 0 24 24" width="32" height="32"><path fill="${color}" stroke="#fff" stroke-width="1.5" d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7z"/><circle cx="12" cy="9" r="2.6" fill="#fff"/></svg>`, iconSize: [32, 32], iconAnchor: [16, 31] });
+
+// مخطط نواكشوط: حدود المقاطعات التسع (تقريبية) مع أسمائها، تحت العلامات
+export function zonesLayer(L, { names = {}, counts = {}, highlight = null, onClick } = {}) {
+  const g = L.layerGroup();
+  for (const [code, ring] of Object.entries(NKC_ZONES)) {
+    const on = code === highlight;
+    const poly = L.polygon(ring, { color: on ? '#c0392b' : '#0e5a4c', weight: on ? 2.5 : 1.5, dashArray: on ? null : '5 4', fillOpacity: on ? 0.08 : 0.03, interactive: !!onClick, bubblingMouseEvents: !onClick });
+    const n = counts[code];
+    poly.bindTooltip(`${names[code] || code}${n ? ` (${n})` : ''}`, { permanent: true, direction: 'center', className: 'zone-label' });
+    if (onClick) poly.on('click', () => onClick(code));
+    g.addLayer(poly);
+  }
+  return g;
+}
+export const zoneNames = (moughataas) => Object.fromEntries(moughataas.filter((m) => NKC_ZONES[m.code]).map((m) => [m.code, m.name_ar]));
 
 export function InfoRow({ label, children }) {
   const empty = (c) => c == null || c === '' || c === false || (Array.isArray(c) && c.every(empty));

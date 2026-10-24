@@ -48,3 +48,14 @@ test('تطبيع النص ورقم القطعة', () => {
   assert.equal(norm('أَرْضٌ ١٢'), norm('ارض 12'));
   assert.equal(normLot(' ١٢-B '), normLot('12b'));
 });
+
+test('مخطط نواكشوط: المقاطعة من موقع العلامة', async () => {
+  const { zoneAt, lotLabel, NKC_ZONES } = await import('../../shared/nouakchottZones.js');
+  const { WILAYAS } = await import('../../server/geo/mauritania.js');
+  assert.equal(Object.keys(NKC_ZONES).length, 9);
+  // مركز كل مقاطعة من مقاطعات نواكشوط يقع داخل حدودها
+  for (const w of WILAYAS.filter((x) => x.code.startsWith('NK'))) for (const [code, , , , lat, lng] of w.m) assert.equal(zoneAt(lat, lng), code, code);
+  assert.equal(zoneAt(16.5138, -15.805), null); // روصو
+  assert.equal(zoneAt(null, null), null);
+  assert.equal(lotLabel({ lot_number: '123', sector: 'C', plan: '' }), 'قطعة 123 · قطاع C');
+});
