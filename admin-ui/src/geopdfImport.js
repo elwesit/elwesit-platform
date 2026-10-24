@@ -1,5 +1,7 @@
 // استيراد مخطط PDF مضبوط الإحداثيات (GeoPDF) مباشرة من الهاتف: يُرسم في المتصفح، يُعدَّل ليطابق الخريطة، وتُستخرج أرقام القطع.
 import { findGeoViewports, lotLabels } from '@shared/geopdf.js';
+import { strokeSegments, lotShapes } from '@shared/lotShapes.js';
+import { flatPoly } from '@shared/plans.js';
 import { zoneAt } from '@shared/nouakchottZones.js';
 
 const MAX_SIDE = 4096;
@@ -40,6 +42,10 @@ export async function readGeoPdf(file, onStep = () => {}) {
     const tc = await page.getTextContent();
     const items = tc.items.filter((it) => it.transform).map((it) => ({ str: it.str, x: it.transform[4], y: it.transform[5], w: it.width, size: Math.hypot(it.transform[2], it.transform[3]), font: it.fontName, h: it.transform[1] === 0 && it.transform[2] === 0 }));
     const labels = lotLabels(items, vp.bbox);
+    // حدود القطع من خطوط المخطط (تُحسب منها الأضلاع والمساحة)
+    onStep('استخراج حدود القطع');
+    let shapes = [];
+    try { shapes = lotShapes(strokeSegments(await page.getOperatorList(), pdfjs.OPS), labels, vp.bbox, vp.toGeo); } catch { shapes = []; }
 
     const [x1, y1, x2, y2] = vp.bbox;
     const corners = [[x1, y1], [x2, y1], [x2, y2], [x1, y2]];
@@ -53,7 +59,11 @@ export async function readGeoPdf(file, onStep = () => {}) {
     onStep('حفظ');
 
     const name = baseName(file.name);
-    const lots = labels.map((l) => { const [lat, lng] = vp.toGeo(l.x, l.y); return [l.text, +lat.toFixed(7), +lng.toFixed(7)]; });
+    const lots = labels.map((l, i) => {
+      const [lat, lng] = vp.toGeo(l.x, l.y);
+      const sh = shapes[i] && shapes[i].p.length <= 80 ? flatPoly(shapes[i].p) : null;
+      return [l.text, +lat.toFixed(7), +lng.toFixed(7), ...(sh ? ['', sh] : [])];
+    });
     return { row: planRow({ name, file, georef: 'geopdf', w, lots }), image: w.image };
   } finally {
     task.destroy();

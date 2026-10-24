@@ -49,6 +49,7 @@ export const KIND = {
   request: { label: 'طلب', icon: 'request', cls: 'k-request' },
   offer: { label: 'عرض', icon: 'home', cls: 'k-offer' },
   property: { label: 'عرض', icon: 'home', cls: 'k-offer' },
+  planlot: { label: 'قطعة', icon: 'pin', cls: 'k-match' },
   appointment: { label: 'موعد', icon: 'calendar', cls: 'k-appt' },
   task: { label: 'مهمة', icon: 'task', cls: 'k-task' },
   inbox: { label: 'وارد', icon: 'inbox', cls: 'k-inbox' },

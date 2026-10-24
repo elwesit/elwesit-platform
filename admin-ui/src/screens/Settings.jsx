@@ -106,6 +106,7 @@ function Plans() {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [del, setDel] = useState(null);
+  const [ren, setRen] = useState(null);
   const [toAlign, setToAlign] = useState([]); // ملفات بلا إحداثيات تنتظر الضبط بنقطتين
   const savePlan = async (row, image) => {
     const id = uuid();
@@ -126,13 +127,23 @@ function Plans() {
     const seen = [...plans];
     for (const { file, d, pdf } of items) {
       try {
-        if (pdf && seen.some((p) => p.source_name === file.name)) { toast(`«${file.name}» مستورد من قبل`, 'err'); continue; }
+        // إعادة إضافة الملف نفسه تُحدّث المخطط (مثلاً لإضافة حدود القطع لمخطط استُورد قبلها)
+        const again = pdf && plans.find((p) => p.source_name === file.name);
         let parsed;
         if (pdf) {
           const g = await import('../geopdfImport.js');
           try { parsed = await g.readGeoPdf(file, (step) => setBusy(`${file.name}: ${step}…`)); } catch (e) { if (e instanceof g.NoGeoError) { setToAlign((a) => [...a, file]); continue; } throw e; }
         } else parsed = parsePlanPackage(d);
         const { row, image } = parsed;
+        if (again) {
+          if (!row.lots.length && again.lots?.length) { toast(`«${planLabel(again)}» موجود من قبل`, 'err'); continue; }
+          const image_file_id = image ? await uploadFile(image, { kind: 'document', owner_type: 'plan', owner_id: again.id }) : again.image_file_id;
+          const { name, lotissement, moughataa_code, ...rest } = row;
+          update('plans', again.id, { ...rest, image_file_id });
+          ok++;
+          toast(`«${planLabel(again)}» حُدّث: ${row.lots.length} قطعة، منها ${row.lots.filter((l) => l[4]).length} بحدودها`);
+          continue;
+        }
         const dup = seen.find((p) => p.name === row.name && p.lotissement === row.lotissement);
         if (dup) { toast(`«${planLabel(row)}» مستورد من قبل`, 'err'); continue; }
         let img = image;
@@ -146,7 +157,7 @@ function Plans() {
         await savePlan(row, img);
         seen.push(row);
         ok++;
-        if (pdf) toast(row.lots.length ? `«${planLabel(row)}»: ${row.lots.length} قطعة` : `«${planLabel(row)}»: وُضع على الخريطة، ولم نجد أرقام قطع في نصه`);
+        if (pdf) toast(row.lots.length ? `«${planLabel(row)}»: ${row.lots.length} قطعة، منها ${row.lots.filter((l) => l[4]).length} بحدودها` : `«${planLabel(row)}»: وُضع على الخريطة، ولم نجد أرقام قطع في نصه`);
       } catch (e) { toast(`${file.name}: ${e.message}`, 'err'); }
     }
     setBusy(false);
@@ -158,22 +169,27 @@ function Plans() {
     try { await savePlan(row, image); toast(`«${planLabel(row)}» وُضع على الخريطة`); } catch (e) { toast(`${file.name}: ${e.message}`, 'err'); }
   };
   return <Section title="مخططات التجزئة">
-    <p className="hint">اختر ملف PDF المخطط كما خرج من ArcMap أو QGIS (بإحداثياته)، ويمكن اختيار عدة ملفات معاً. الملف الممسوح أو الصورة بلا إحداثيات تضبطه بنفسك بنقطتين. كل مخطط يظهر فوق الخريطة في مكانه، وأرقام قطعه قابلة للبحث: اكتب رقم القطعة في العرض فيقترح البرنامج موقعها. المخططات خاصة بك ولا تظهر للزوار.</p>
+    <p className="hint">اختر ملف PDF المخطط كما خرج من ArcMap أو QGIS (بإحداثياته)، ويمكن اختيار عدة ملفات معاً. الملف الممسوح أو الصورة بلا إحداثيات تضبطه بنفسك بنقطتين. لإضافة حدود القطع وأضلاعها إلى مخطط أضفته سابقاً، أضف ملفه نفسه مرة أخرى فيُحدَّث. كل مخطط يظهر فوق الخريطة في مكانه، وأرقام قطعه قابلة للبحث: اكتب رقم القطعة في العرض فيقترح البرنامج موقعها. المخططات خاصة بك ولا تظهر للزوار.</p>
     {plans.length === 0 && <p className="muted">لا توجد مخططات بعد.</p>}
     {plans.map((p) => <div key={p.id} className="plan-row">
       <div>
         <b>{p.name || planLabel(p)}</b>
-        <small className="muted block">{[p.lotissement, moughataas.find((m) => m.code === p.moughataa_code)?.name_ar, p.lots?.length ? `${p.lots.length} قطعة` : 'بلا فهرس قطع', p.source_date && `بتاريخ ${p.source_date}`, p.georef === 'geopdf' ? 'إحداثيات من الملف نفسه' : p.georef === 'points' ? 'مضبوط بنقاط مرجعية' : ''].filter(Boolean).join(' · ')}</small>
+        <small className="muted block">{[p.lotissement, moughataas.find((m) => m.code === p.moughataa_code)?.name_ar, p.lots?.length ? `${p.lots.length} قطعة${p.lots.some((l) => l[4]) ? `، ${p.lots.filter((l) => l[4]).length} بحدودها` : ''}` : 'بلا فهرس قطع', p.source_date && `بتاريخ ${p.source_date}`, p.georef === 'geopdf' ? 'إحداثيات من الملف نفسه' : p.georef === 'points' ? 'مضبوط بنقاط مرجعية' : ''].filter(Boolean).join(' · ')}</small>
         {p.source_name && <small className="muted block">المصدر: {p.source_name}</small>}
       </div>
       {p.image_file_id && <label className="inline-check"><input type="checkbox" checked={!!p.visible} onChange={(e) => update('plans', p.id, { visible: e.target.checked })} /> يظهر على الخريطة</label>}
       {p.image_file_id && <a className="btn btn-default btn-sm" href={fileUrl({ id: p.image_file_id })} target="_blank" rel="noopener">الصورة</a>}
+      <Btn small kind="ghost" onClick={() => setRen({ id: p.id, name: planLabel(p) })}>الاسم</Btn>
       <Btn small kind="ghost" onClick={() => setDel(p)}>حذف</Btn>
     </div>)}
     <div className="row-actions">
       <label className={`btn btn-default upload-btn${busy ? ' disabled' : ''}`}>{busy ? (typeof busy === 'string' ? busy : 'جارٍ الاستيراد…') : 'إضافة مخطط (PDF)'}<input type="file" multiple hidden disabled={busy} onChange={(e) => { importFiles([...e.target.files]); e.target.value = ''; }} /></label>
     </div>
     {toAlign.length > 0 && <React.Suspense fallback={null}><PlanAlign key={toAlign[0].name + toAlign.length} file={toAlign[0]} onDone={aligned} onClose={() => setToAlign((a) => a.slice(1))} /></React.Suspense>}
+    {ren && <Sheet title="اسم المخطط" onClose={() => setRen(null)} footer={<><Btn onClick={() => setRen(null)}>إلغاء</Btn><Btn kind="primary" disabled={!ren.name.trim()} onClick={() => { update('plans', ren.id, { name: ren.name.trim(), lotissement: ren.name.trim() }); setRen(null); }}>حفظ</Btn></>}>
+      <Field label="الاسم كما تبحث به (مثل: المنارة، قطاع 9)"><Input value={ren.name} onChange={(x) => setRen({ ...ren, name: x })} /></Field>
+      <p className="hint">البحث يقبل أيضاً اسم الملف الأصلي واسم المقاطعة.</p>
+    </Sheet>}
     {del && <Sheet title="حذف المخطط" onClose={() => setDel(null)} footer={<><Btn onClick={() => setDel(null)}>إلغاء</Btn><Btn kind="primary" onClick={() => { archive('plans', del.id); setDel(null); }}>حذف</Btn></>}>
       <p>حذف «{del.name || planLabel(del)}» من الخريطة والبحث؟ مواقع العروض التي وُضعت منه تبقى كما هي.</p>
     </Sheet>}
