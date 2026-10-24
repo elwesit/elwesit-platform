@@ -549,6 +549,20 @@ test('إضافة مخطط PDF من الهاتف: الممسوح يُضبط بن�
   await page.getByRole('button', { name: 'اعرض' }).click();
   await expect(page.locator('.lot-info')).toContainText(`قطعة 9110 · المنارة ${tag}`);
 
+  // صورة القطعة من المخطط في صفحة العرض: عرض بلا صور يقترحها، وتُضاف إلى صوره
+  const { row: lotProp } = await api(page).post('/e/properties', { id: crypto.randomUUID(), deal: 'sale', type: 'land', wilaya_code: 'NKW', moughataa_code: 'TVZ', lot_number: '9103' });
+  await page.goto('/admin/#/properties/' + lotProp.id);
+  const np = page.locator('.no-photos');
+  await expect(np).toContainText('هذا العرض بلا صور');
+  await np.getByRole('button', { name: 'صورة القطعة من المخطط' }).click();
+  await expect(page.locator('.toasts')).toContainText('أُضيفت صورة القطعة 9103', { timeout: 30000 });
+  await expect(np).toHaveCount(0);
+  await waitSaved(page);
+  const snap = (await api(page).get('/sync')).data.files.find((x) => x.owner_id === lotProp.id && x.kind === 'photo');
+  expect(snap.name).toBe('lot-9103.jpg');
+  const meta = await sharp(await (await page.request.get('/api/admin/files/' + snap.id)).body()).metadata();
+  expect([meta.width, meta.height]).toEqual([1200, 900]);
+
   // إعادة إضافة الملف نفسه تُحدّث المخطط ولا تكرره
   await page.goto('/admin/#/settings?tab=plans');
   await input.setInputFiles({ name: `Lotissement_${tag}`, mimeType: 'application/octet-stream', buffer: makeGeoPdf({ first: 9101 }) });

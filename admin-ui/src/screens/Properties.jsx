@@ -1,8 +1,9 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { useTable, useRow, create, update, archive, call, api, storeSnapshot, useStore, getState, table } from '../data.js';
+import { useTable, useRow, create, update, archive, call, api, storeSnapshot, useStore, getState, getRow, table, uploadFile } from '../data.js';
+import { lotSnapshot } from '../lotSnapshot.js';
 import { fieldsFor, cleanupFor } from '@shared/typeFields.js';
 import { Btn, Field, Input, NumInput, Select, Seg, Chips, Toggle, TextArea, Sheet, Section, Empty, KindTag, Pending, Icon, LinkBtn, useToast, Confirm } from '../ui.jsx';
-import { Missing, PersonPicker, GeoFields, PriceFields, NextStep, ContactActions, Timeline, Photos, InfoRow, SplitLayout, useSettings, loadLeaflet, tileLayer, pinIcon, zonesLayer, zoneNames, attachPlans } from '../components.jsx';
+import { Missing, PersonPicker, GeoFields, PriceFields, NextStep, ContactActions, Timeline, Photos, InfoRow, SplitLayout, useSettings, compressImage, loadLeaflet, tileLayer, pinIcon, zonesLayer, zoneNames, attachPlans } from '../components.jsx';
 import { findPlanLots, planLabel, hitTag, hitPlanCount, shapeText, searchPlanLots, parseLotQuery } from '@shared/plans.js';
 import { zoneAt, lotLabel, NKC_ZONES } from '@shared/nouakchottZones.js';
 import MapPicker from '../MapPicker.jsx';
@@ -110,6 +111,7 @@ function PropertyDetail({ id, tab }) {
       <Btn small icon="check" onClick={() => { update('properties', id, { verified_at: new Date().toISOString(), availability: p.availability === 'unknown' ? 'available' : p.availability }); toast('سُجّل التحقق اليوم'); }}>تحققت اليوم</Btn>
     </div>
     {!p.archived_at && <PublishStatus p={p} />}
+    {!p.archived_at && <NoPhotos p={p} />}
     <NextStep link={{ property_id: id }} defaultTitle={'تحقق من ' + p.ref} />
     <div className="detail-grid">
       <div>
@@ -143,6 +145,7 @@ function PropertyDetail({ id, tab }) {
         </Section>
         <Section title="الصور" collapsible>
           <Photos ownerType="property" ownerId={id} />
+          <LotPhotoBtn p={p} />
         </Section>
         <Section title="الوثائق الخاصة" collapsible defaultOpen={false}>
           <Photos ownerType="property" ownerId={id} kind="document" />
@@ -257,6 +260,54 @@ function GeometrySheet({ property, onClose }) {
 
 // ---------- النشر ----------
 // النشر وإلغاؤه: منطق واحد تستعمله بطاقة الحالة أعلى العرض
+// صورة القطعة من المخطط: تُضاف إلى صور العرض كأي صورة، ويختار المستخدم نشرها
+function addPhoto(p, id) {
+  const sel = getRow('properties', p.id)?.pub_photo_ids || [];
+  if (sel.length) update('properties', p.id, { pub_photo_ids: [...sel, id] });
+}
+function useLotHit(p) {
+  const plans = useTable('plans');
+  return useMemo(() => {
+    if (!p.lot_number) return null;
+    const hits = findPlanLots(plans, p.lot_number, { plan: p.plan, moughataa_code: p.moughataa_code }).filter((h) => h.plan.image_file_id);
+    const d = (h) => (p.lat == null ? (h.shape ? 0 : 1) : (h.lat - p.lat) ** 2 + (h.lng - p.lng) ** 2);
+    return hits.sort((a, b) => d(a) - d(b))[0] || null;
+  }, [plans, p.lot_number, p.plan, p.moughataa_code, p.lat, p.lng]);
+}
+function LotPhotoBtn({ p, small = true }) {
+  const hit = useLotHit(p);
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  if (!hit) return null;
+  const run = async () => {
+    setBusy(true);
+    try {
+      const id = await uploadFile(await lotSnapshot(hit), { kind: 'photo', owner_type: 'property', owner_id: p.id });
+      addPhoto(p, id);
+      toast(`أُضيفت صورة القطعة ${hit.lot} من ${planLabel(hit.plan)}`);
+    } catch (e) { toast(e.message || 'تعذر تجهيز صورة القطعة', 'err'); } finally { setBusy(false); }
+  };
+  return <Btn small={small} icon="pin" onClick={run} disabled={busy}>{busy ? 'جارٍ التجهيز…' : 'صورة القطعة من المخطط'}</Btn>;
+}
+function NoPhotos({ p }) {
+  const files = useTable('files');
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  if (files.some((f) => f.owner_type === 'property' && f.owner_id === p.id && f.kind === 'photo' && !f.archived_at)) return null;
+  const onFile = async (f) => {
+    if (!f) return;
+    setBusy(true);
+    try { addPhoto(p, await uploadFile(await compressImage(f), { kind: 'photo', owner_type: 'property', owner_id: p.id })); } catch { toast('تعذر تجهيز الصورة', 'err'); } finally { setBusy(false); }
+  };
+  return <div className="no-photos">
+    <span>هذا العرض بلا صور. العروض المصوّرة تجذب الزوار أكثر.</span>
+    <div className="np-actions">
+      <label className="btn btn-default btn-sm"><Icon name="photo" size={16} /><span>{busy ? 'جارٍ التجهيز…' : 'التقط صورة'}</span><input type="file" hidden accept="image/*" capture="environment" onChange={(e) => { onFile(e.target.files[0]); e.target.value = ''; }} /></label>
+      <LotPhotoBtn p={p} />
+    </div>
+  </div>;
+}
+
 function usePublish(p) {
   const files = useTable('files').filter((f) => f.owner_type === 'property' && f.owner_id === p.id && f.kind === 'photo' && !f.archived_at && !f._pending);
   const toast = useToast();
