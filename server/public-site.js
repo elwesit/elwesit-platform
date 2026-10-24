@@ -6,7 +6,7 @@ import { publicReadDb } from './db.js';
 import { config } from './config.js';
 import { submitInbox } from './inbox-intake.js';
 import { isStaff, rateLimit, sameOrigin } from './auth.js';
-import { layout, card, searchForm, inboxForm, priceText, featuresList, safeJson, icon } from './public-views.js';
+import { layout, card, waAsk, searchForm, inboxForm, priceText, featuresList, safeJson, icon } from './public-views.js';
 import { escapeHtml as e, norm, normLot } from '../shared/text.js';
 import { TYPES, DEALS_PUBLIC } from '../shared/vocab.js';
 import { formatNumber } from '../shared/money.js';
@@ -29,6 +29,8 @@ function geo() { return site().geo || { wilayas: [], moughataas: [] }; }
 function baseUrl(req, s) {
   return (s.base_url || config.baseUrl || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
 }
+// ما يلزم زر «استفسر عبر واتساب»: رقم واتساب العمل من الإعدادات ورابط الموقع
+const askCtx = (req, s) => ({ base: baseUrl(req, s), siteName: s.site_name, wa: normalizePhone(s.contact_whatsapp || s.contact_phone || '') });
 
 // تحويل قيم البحث إلى شروط SQL على public.db
 function buildQuery(q) {
@@ -109,7 +111,7 @@ export function publicRouter() {
     <p class="map-note">الدوائر تشير إلى موقع تقريبي. العلامة لا تثبت حدود العقار أو ملكيته.</p>
   </div>
   <div class="list-panel" id="list-panel" ${view === 'map' ? 'hidden' : ''}>
-  ${items.length ? `<div class="grid" id="grid">${items.map((l) => card(l)).join('')}</div>` : `<div class="empty"><p>${filtered ? 'لا توجد عقارات منشورة تطابق بحثك حالياً.' : 'لا توجد عقارات منشورة حالياً.'}</p><a class="btn btn-primary" href="/request">أرسل طلبك وسنبحث لك</a></div>`}
+  ${items.length ? `<div class="grid" id="grid">${items.map((l) => card(l, askCtx(req, s))).join('')}</div>` : `<div class="empty"><p>${filtered ? 'لا توجد عقارات منشورة تطابق بحثك حالياً.' : 'لا توجد عقارات منشورة حالياً.'}</p><a class="btn btn-primary" href="/request">أرسل طلبك وسنبحث لك</a></div>`}
   ${next ? `<div class="more-wrap"><a class="btn btn-outline" id="load-more" href="?${qs ? qs + '&' : ''}cursor=${encodeURIComponent(next)}#results" data-next="${e(next)}">عرض المزيد</a></div>` : ''}
   </div>
 </section>`;
@@ -125,7 +127,7 @@ export function publicRouter() {
       return res.json({ items: rows.map(publicJson), without_location: hiddenCount });
     }
     const out = listListings(req.query, { limit: Math.min(30, s.listing_page_size || 10), cursor: req.query.cursor });
-    res.json({ items: out.items.map(publicJson), html: out.items.map((l) => card(l)).join(''), next: out.next, total: out.total });
+    res.json({ items: out.items.map(publicJson), html: out.items.map((l) => card(l, askCtx(req, s))).join(''), next: out.next, total: out.total });
   });
 
   r.get('/p/:ref', (req, res) => {
@@ -135,9 +137,7 @@ export function publicRouter() {
     const url = `${baseUrl(req, s)}/p/${encodeURIComponent(l.ref)}`;
     const photos = safeJson(l.photos);
     const p = priceText(l);
-    const wa = normalizePhone(s.contact_whatsapp || s.contact_phone || '');
     const tel = normalizePhone(s.contact_phone || '');
-    const waText = `السلام عليكم، أستفسر عن العقار ${l.ref}: ${l.title}\n${url}`;
     const feats = featuresList(l);
     const dir = l.lat != null ? directionsLinks(l.lat, l.lng) : null;
     const facts = [
@@ -175,7 +175,7 @@ export function publicRouter() {
         <h2>تواصل بخصوص ${e(l.ref)}</h2>
         <div class="contact-actions">
           ${tel ? `<a class="btn btn-primary btn-block" href="tel:+${tel}">${icon.phone}<span>اتصل</span></a>` : ''}
-          ${wa ? `<a class="btn btn-wa btn-block" href="https://wa.me/${wa}?text=${encodeURIComponent(waText)}" rel="noopener">${icon.wa}<span>واتساب</span></a>` : ''}
+          ${waAsk(l, askCtx(req, s), 'btn-block')}
           <button class="btn btn-outline btn-block share-btn" type="button" data-url="${e(url)}" data-title="${e(l.title)}">${icon.share}<span>مشاركة الرابط</span></button>
         </div>
         <h3>أو اترك رقمك ونتصل بك</h3>
@@ -204,7 +204,7 @@ export function publicRouter() {
     if (!sameOrigin(req)) return fail(403, 'طلب من مصدر غير مقبول');
     if (!rateLimit('inbox:' + req.ip, 12, 3600000)) return fail(429, 'أرسلت طلبات كثيرة خلال وقت قصير. حاول بعد قليل أو تواصل عبر الهاتف.');
     try {
-      const out = await submitInbox(req.body || {}, req.files || []);
+      const out = await submitInbox(req.body || {}, req.files || [], { baseUrl: baseUrl(req, site()) });
       if (out.error) return fail(400, out.error);
       if (wantsJson) return res.json({ ok: true, duplicate: out.duplicate, receipt: out.receipt, photos_failed: out.photosFailed });
       return res.redirect(303, '/thanks?r=' + encodeURIComponent(out.receipt));

@@ -560,3 +560,65 @@ test('إضافة مخطط PDF من الهاتف: الممسوح يُضبط بن�
   await page.locator('.sheet, [role=dialog]').last().getByRole('button', { name: 'حذف' }).click();
   await expect(renamed).toHaveCount(0);
 });
+
+test('استفسر عبر واتساب: من بطاقة العرض ← حفظ الاستفسار ← رسالة جاهزة ← مراسلة الزبون من الإدارة', async ({ page, browser }) => {
+  await login(page);
+  const A = api(page);
+  const { settings } = await A.get('/settings');
+  if (!settings.contact_whatsapp) await page.request.put('/api/admin/settings', { data: { contact_whatsapp: '26463808' }, headers: { 'x-wasit': '1' } });
+  const ourWa = '222' + (settings.contact_whatsapp || '26463808').replace(/\D/g, '').slice(-8);
+  const { row } = await A.post('/e/properties', { id: crypto.randomUUID(), deal: 'sale', type: 'land', wilaya_code: 'NKW', moughataa_code: 'TVZ', lot_number: '7' + rnd().replace(/\D/g, '') + '1', area_m2: 450, price_amount: 2500000, price_currency: 'MRU' });
+  expect((await A.post(`/properties/${row.id}/publish`, {})).ok).toBeTruthy();
+  const title = row.title;
+
+  const visitor = await browser.newContext(ANON);
+  const waUrls = [];
+  await visitor.route('https://wa.me/**', (r) => { waUrls.push(r.request().url()); r.fulfill({ status: 200, contentType: 'text/html', body: '<p>whatsapp</p>' }); });
+  const v = await visitor.newPage();
+  await v.goto('/');
+  const card = v.locator(`article.card[data-ref="${row.ref}"]`);
+  await card.getByRole('link', { name: 'استفسر عبر واتساب' }).click();
+  const dlg = v.getByRole('dialog', { name: 'استفسر عبر واتساب' });
+  await expect(dlg).toContainText(row.ref);
+  // الاسم والرقم مطلوبان
+  await dlg.getByRole('button', { name: 'متابعة إلى واتساب' }).click();
+  await expect(dlg.locator('.form-status')).toContainText('اكتب اسمك');
+  const name = 'زبون ' + rnd();
+  await dlg.getByLabel(/الاسم/).fill(name);
+  await dlg.getByLabel(/رقم واتساب/).fill('36 44 55 66');
+  await dlg.getByLabel(/استفسارك/).fill('هل يوجد سند ملكية؟');
+  const go = dlg.getByRole('button', { name: 'متابعة إلى واتساب' });
+  await go.dblclick(); // الضغط المتكرر لا يكرر الاستفسار
+  await expect.poll(() => waUrls.length, { timeout: 15000 }).toBeGreaterThan(0);
+  const text = new URL(waUrls[0]).searchParams.get('text');
+  expect(new URL(waUrls[0]).pathname).toBe('/' + ourWa);
+  for (const s of ['السلام عليكم، أنا مهتم بهذا العقار المنشور في موقع', `• العقار: ${title}`, `• رقم العرض: ${row.ref}`, '• المساحة: 450 م²', '• السعر: 2.5 مليون أوقية جديدة (25 مليون أوقية قديمة)', `/p/${row.ref}`, '• استفساري: هل يوجد سند ملكية؟']) expect(text).toContain(s);
+
+  // المرة الثانية: الاسم والرقم محفوظان على الجهاز، وتعذر الحفظ يُبقي واتساب متاحاً
+  await v.goto('/p/' + row.ref);
+  await v.route('**/api/public/inbox', (r) => r.abort());
+  await v.locator('.contact-actions').getByRole('link', { name: 'استفسر عبر واتساب' }).click();
+  await expect(dlg.getByLabel(/الاسم/)).toBeHidden();
+  await expect(dlg).toContainText(name);
+  await dlg.getByRole('button', { name: 'متابعة إلى واتساب' }).click();
+  await expect(dlg.locator('.form-status')).toContainText('لم يُحفظ استفسارك');
+  await expect(dlg.getByRole('link', { name: 'تواصل عبر واتساب دون حفظ' })).toHaveAttribute('href', new RegExp(`wa\\.me/${ourWa}\\?text=`));
+  await visitor.close();
+
+  const { data } = await A.get('/sync?since=');
+  const saved = data.inbox.filter((m) => m.property_ref === row.ref);
+  expect(saved).toHaveLength(1);
+  expect(saved[0].name).toBe(name);
+
+  await page.goto('/admin/#/inbox');
+  await page.getByRole('link', { name: new RegExp(name) }).click();
+  await expect(page.locator('#main')).toContainText('هل يوجد سند ملكية؟');
+  await expect(page.locator('.info-row').filter({ hasText: 'العقار' }).first()).toContainText(`قطعة ${row.lot_number}`); // رقم القطعة الحقيقي في الإدارة
+  await expect(page.locator('#main')).toContainText('لا يعني أنه ضغط «إرسال»');
+  const reply = page.getByRole('link', { name: 'مراسلة الزبون عبر واتساب' });
+  const href = await reply.getAttribute('href');
+  expect(href).toContain('wa.me/22236445566?text=');
+  const rt = new URL(href).searchParams.get('text');
+  for (const s of [name, title, row.ref, '450 م²', '2.5 مليون أوقية جديدة (25 مليون أوقية قديمة)', `/p/${row.ref}`]) expect(rt).toContain(s);
+  await page.screenshot({ path: `tests/e2e-report/wa-inquiry-admin-${test.info().project.name}.png`, fullPage: true });
+});

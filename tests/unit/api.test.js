@@ -147,6 +147,36 @@ test('نموذج الزائر: هاتف خاطئ يُرفض، والإرسال �
   assert.equal(interest.status, 400, 'الاهتمام بعقار غير منشور يُرفض');
 });
 
+test('استفسار عبر واتساب: يُحفظ مع بيانات العرض، والضغط المتكرر لا يكرره', async () => {
+  await admin.req('PUT', '/api/admin/settings', { contact_whatsapp: '26463808' });
+  const r = await admin.req('POST', '/api/admin/e/properties', { id: crypto.randomUUID(), deal: 'sale', type: 'land', wilaya_code: 'NKN', moughataa_code: 'TJN', area_m2: 600, price_amount: 3000000, price_currency: 'MRU' });
+  const p = r.body.row;
+  assert.equal((await admin.req('POST', `/api/admin/properties/${p.id}/publish`, {})).status, 200);
+  const anon = client();
+  const page = await anon.req('GET', '/p/' + p.ref);
+  assert.ok(page.body.includes('استفسر عبر واتساب'));
+  assert.ok(page.body.includes('https://wa.me/22226463808?text='), 'رقم واتساب العمل من الإعدادات');
+  assert.ok((await anon.req('GET', '/')).body.includes(`data-ref="${p.ref}"`), 'الزر في بطاقة العرض');
+  const noName = await anon.req('POST', '/api/public/inbox', { kind: 'interest', via: 'whatsapp', phone: '36 11 22 33', property_ref: p.ref });
+  assert.equal(noName.status, 400);
+  const send = (extra) => anon.req('POST', '/api/public/inbox', { kind: 'interest', via: 'whatsapp', name: 'أحمد', phone: '36 11 22 33', property_ref: p.ref, client_token: crypto.randomUUID(), ...extra });
+  const a = await send({ message: 'هل السعر قابل للتفاوض؟' });
+  const b = await send({});
+  const c = await send({ message: 'متى المعاينة؟' });
+  assert.equal(a.body.ok, true);
+  assert.equal(b.body.duplicate, true);
+  assert.equal(c.body.receipt, a.body.receipt);
+  const rows = db().prepare("SELECT * FROM inbox WHERE property_ref = ? AND kind = 'interest'").all(p.ref);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].message, 'هل السعر قابل للتفاوض؟\nمتى المعاينة؟');
+  const payload = JSON.parse(rows[0].payload);
+  assert.equal(payload.via, 'whatsapp');
+  assert.equal(payload.listing.ref, p.ref);
+  assert.equal(payload.listing.area_m2, 600);
+  assert.match(payload.listing.price, /3 مليون أوقية جديدة/);
+  assert.ok(payload.listing.url.endsWith('/p/' + p.ref));
+});
+
 test('تحويل الوارد إلى شخص وطلب', async () => {
   const item = db().prepare("SELECT id FROM inbox WHERE kind = 'search' LIMIT 1").get();
   const r = await admin.req('POST', `/api/admin/inbox/${item.id}/convert`, { request: { deal: 'rent', types: ['house'] }, task: { title: 'اتصل بالزائر' } });

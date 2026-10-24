@@ -169,4 +169,98 @@
       }
     });
   });
+  // ---------- «استفسر عبر واتساب» ----------
+  // نطلب الاسم والرقم مرة واحدة (يُتذكّران على هذا الجهاز)، نحفظ الاستفسار في الموقع، ثم نفتح واتساب برسالة جاهزة.
+  // فتح واتساب يجهّز الرسالة فقط؛ الزبون هو من يضغط «إرسال».
+  const CONTACT_KEY = 'wasit-contact';
+  const getContact = () => { try { return JSON.parse(localStorage.getItem(CONTACT_KEY) || 'null') || {}; } catch { return {}; } };
+  const setContact = (c) => { try { localStorage.setItem(CONTACT_KEY, JSON.stringify(c)); } catch {} };
+  const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
+  const tokens = {}; // رمز لكل عقار: إعادة المحاولة بعد خطأ لا تكرر الاستفسار
+  let dlg = null;
+
+  function openWhatsApp(url) {
+    // على الهاتف ينتقل الرابط إلى تطبيق واتساب؛ على الحاسوب نفتحه في لسان جديد ونبقي الموقع
+    if (matchMedia('(pointer: coarse)').matches) { location.href = url; return; }
+    const w = window.open(url, '_blank');
+    if (w) w.opener = null; else location.href = url;
+  }
+
+  function askDialog(a) {
+    if (dlg) dlg.remove();
+    const c = getContact();
+    const known = !!(c.name && c.phone);
+    dlg = document.createElement('dialog');
+    dlg.className = 'ask-dlg';
+    dlg.setAttribute('aria-labelledby', 'ask-title');
+    dlg.innerHTML = `<form novalidate>
+      <h2 id="ask-title">استفسر عبر واتساب</h2>
+      <p class="ask-prop">${esc(a.dataset.title)} · رقم العرض ${esc(a.dataset.ref)}</p>
+      <div class="ask-who" ${known ? '' : 'hidden'}><span>${esc(c.name || '')} · <bdi dir="ltr">${esc(c.phone || '')}</bdi></span><button type="button" class="ask-edit">تغيير</button></div>
+      <div class="ask-fields" ${known ? 'hidden' : ''}>
+        <label class="f"><span>الاسم <b class="req">*</b></span><input name="name" autocomplete="name" maxlength="120" value="${esc(c.name || '')}"></label>
+        <label class="f"><span>رقم واتساب <b class="req">*</b></span><input name="phone" type="tel" inputmode="tel" dir="ltr" autocomplete="tel" maxlength="25" placeholder="مثلاً 22 33 44 55" value="${esc(c.phone || '')}"></label>
+      </div>
+      <label class="f"><span>استفسارك (اختياري)</span><textarea name="message" rows="2" maxlength="1000" placeholder="مثلاً: هل السعر قابل للتفاوض؟"></textarea></label>
+      <div class="form-status" role="status" aria-live="polite"></div>
+      <div class="ask-btns">
+        <button class="btn btn-wa btn-block ask-go" type="submit">متابعة إلى واتساب</button>
+        <a class="btn btn-wa btn-block ask-direct" hidden rel="noopener" target="_blank"></a>
+        <button class="btn btn-outline btn-block ask-cancel" type="button">إلغاء</button>
+      </div>
+      <p class="hint">يُحفظ استفسارك لدينا ثم يُفتح واتساب برسالة جاهزة؛ اضغط «إرسال» في واتساب لتصلنا. <a href="/privacy">الخصوصية</a></p>
+    </form>`;
+    document.body.appendChild(dlg);
+    const f = $('form', dlg), status = $('.form-status', dlg), go = $('.ask-go', dlg), direct = $('.ask-direct', dlg);
+    const setStatus = (cls, msg) => { status.className = 'form-status ' + cls; status.textContent = msg; };
+    const waUrl = () => {
+      const q = f.elements.message.value.trim();
+      return `https://wa.me/${a.dataset.wa}?text=${encodeURIComponent(a.dataset.text + (q ? `\n• استفساري: ${q}` : ''))}`;
+    };
+    const showDirect = (label) => { direct.href = waUrl(); direct.textContent = label; direct.hidden = false; };
+    $('.ask-edit', dlg).addEventListener('click', () => { $('.ask-who', dlg).hidden = true; $('.ask-fields', dlg).hidden = false; f.elements.name.focus(); });
+    $('.ask-cancel', dlg).addEventListener('click', () => dlg.close());
+    dlg.addEventListener('close', () => { dlg.remove(); dlg = null; });
+    let busy = false;
+    f.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      if (busy) return; // منع التكرار بالضغط المتكرر
+      const name = f.elements.name.value.trim(), phone = f.elements.phone.value.trim();
+      const reveal = () => { $('.ask-who', dlg).hidden = true; $('.ask-fields', dlg).hidden = false; };
+      if (!name) { reveal(); setStatus('err', 'اكتب اسمك.'); f.elements.name.focus(); return; }
+      if (phone.replace(/\D/g, '').length < 8) { reveal(); setStatus('err', 'اكتب رقم واتساب صحيحاً (8 أرقام).'); f.elements.phone.focus(); return; }
+      busy = true; go.disabled = true; go.textContent = 'جارٍ الحفظ…'; direct.hidden = true;
+      setStatus('wait', 'جارٍ حفظ استفسارك…');
+      const ref = a.dataset.ref;
+      tokens[ref] ||= uuid();
+      const fd = new FormData();
+      Object.entries({ kind: 'interest', via: 'whatsapp', contact_pref: 'whatsapp', property_ref: ref, name, phone, message: f.elements.message.value.trim(), client_token: tokens[ref] }).forEach(([k, v]) => fd.append(k, v));
+      const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 10000);
+      try {
+        const r = await fetch('/api/public/inbox', { method: 'POST', body: fd, headers: { Accept: 'application/json' }, signal: ctl.signal });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || !j.ok) throw new Error(j.message || 'تعذر الحفظ');
+        delete tokens[ref];
+        setContact({ name, phone });
+        setStatus('ok', '✓ حُفظ استفسارك. يُفتح واتساب الآن؛ اضغط «إرسال» هناك لتصلنا رسالتك.');
+        go.hidden = true; showDirect('افتح واتساب');
+        openWhatsApp(waUrl());
+      } catch (e) {
+        // تعذر الحفظ: نُبقي التواصل عبر واتساب ممكناً
+        const offline = !navigator.onLine || e instanceof TypeError || e.name === 'AbortError';
+        setStatus('err', `${offline ? 'لا يوجد اتصال بالموقع' : e.message}، فلم يُحفظ استفسارك لدينا. يمكنك مراسلتنا عبر واتساب مباشرة، أو إعادة المحاولة.`);
+        go.disabled = false; go.textContent = 'إعادة محاولة الحفظ';
+        showDirect('تواصل عبر واتساب دون حفظ');
+      } finally { clearTimeout(timer); busy = false; }
+    });
+    dlg.showModal();
+    (known ? f.elements.message : f.elements.name).focus();
+  }
+
+  document.addEventListener('click', (ev) => {
+    const a = ev.target.closest && ev.target.closest('a.wa-ask');
+    if (!a || ev.defaultPrevented || ev.button || ev.metaKey || ev.ctrlKey || typeof HTMLDialogElement !== 'function') return;
+    ev.preventDefault();
+    askDialog(a);
+  });
 })();

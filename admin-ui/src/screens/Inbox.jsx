@@ -5,6 +5,7 @@ import { Missing, SplitLayout, Photos, PersonPicker } from '../components.jsx';
 import { RequestForm } from './Requests.jsx';
 import { INBOX_KINDS, INBOX_SOURCES, TYPES, DEALS } from '@shared/vocab.js';
 import { parseCapture, buildGazetteer } from '@shared/capture.js';
+import { replyMessage, factLines } from '@shared/inquiry.js';
 import { fmtDateTime, ago, waUrl, telUrl, displayPhone, normalizePhone, personLabel } from '../fmt.js';
 import { href, go, back } from '../router.js';
 
@@ -25,7 +26,7 @@ function InboxList({ selected }) {
     <ul className="list">{list.map((m) => <li key={m.id}><a className={`list-item${selected === m.id ? ' on' : ''}${m.status === 'new' ? ' unread' : ''}`} href={href('inbox/' + m.id)}>
       <KindTag kind={m.kind === 'offer' ? 'offer' : m.kind === 'search' ? 'request' : 'inbox'} small />
       <div className="li-body">
-        <div className="li-top"><b>{INBOX_KINDS[m.kind]}</b> <span>{m.name || displayPhone(m.phone_norm) || 'زائر'}</span>{m.status === 'new' && <span className="tag warn">جديد</span>}</div>
+        <div className="li-top"><b>{INBOX_KINDS[m.kind]}</b> <span>{m.name || displayPhone(m.phone_norm) || 'زائر'}</span>{m.payload?.via === 'whatsapp' && <span className="tag">عبر واتساب</span>}{m.status === 'new' && <span className="tag warn">جديد</span>}</div>
         <small className="muted block">{[m.property_ref && 'العقار ' + m.property_ref, m.payload?.location, m.message].filter(Boolean).join(' · ').slice(0, 120)}</small>
         <small className="muted">{INBOX_SOURCES[m.source]} · {ago(m.created_at)}</small>
       </div>
@@ -35,6 +36,7 @@ function InboxList({ selected }) {
 
 function InboxDetail({ id }) {
   const m = useRow('inbox', id);
+  const settings = useStore().settings || {};
   const [convert, setConvert] = useState(null);
   const phones = useTable('phones');
   useEffect(() => { if (m?.status === 'new' && !m._pending) update('inbox', id, { status: 'seen' }); }, [id, m?.status]); // eslint-disable-line
@@ -43,6 +45,9 @@ function InboxDetail({ id }) {
   const known = phones.find((x) => x.normalized === m.phone_norm && !x.archived_at);
   const prop = m.property_ref && table('properties').find((x) => x.ref === m.property_ref);
   const conv = m.converted || {};
+  // بيانات العرض كما كانت وقت الاستفسار (أو من العرض الحالي إن كان الاستفسار أقدم من هذه الميزة)
+  const facts = p.listing || (m.property_ref ? { ref: m.property_ref, title: prop?.title || '' } : null);
+  const waText = facts ? replyMessage(facts, { name: m.name, siteName: settings.site_name || 'الوسيط العقاري' }) : `السلام عليكم${m.name ? ' ' + m.name : ''}، وصلنا طلبك عبر الموقع.`;
   return <div className="page detail">
     <div className="detail-head">
       <button className="icon-btn back-btn" onClick={() => back('inbox')} aria-label="رجوع"><Icon name="back" /></button>
@@ -52,7 +57,9 @@ function InboxDetail({ id }) {
     <Section title="ما أرسله">
       <dl className="info">
         <div className="info-row"><dt>الهاتف</dt><dd dir="ltr">{m.phone} {p.contact_pref && <small className="muted">(يفضّل {p.contact_pref === 'call' ? 'الاتصال' : 'واتساب'})</small>}</dd></div>
-        {m.property_ref && <div className="info-row"><dt>العقار</dt><dd>{prop ? <a href={href('properties/' + prop.id)}>{m.property_ref}</a> : m.property_ref}</dd></div>}
+        {m.property_ref && <div className="info-row"><dt>العقار</dt><dd>{prop?.lot_number
+          ? <><a href={href('properties/' + prop.id)}>قطعة {prop.lot_number}</a>{[prop.plan, prop.sector].filter(Boolean).length ? ' · ' + [prop.plan, prop.sector].filter(Boolean).join(' · ') : ''} <small className="muted">(رقم العرض {m.property_ref})</small></>
+          : prop ? <a href={href('properties/' + prop.id)}>{m.property_ref}</a> : m.property_ref}</dd></div>}
         {p.deal && <div className="info-row"><dt>العملية</dt><dd>{DEALS[p.deal]}</dd></div>}
         {p.type && <div className="info-row"><dt>النوع</dt><dd>{TYPES[p.type]}</dd></div>}
         {p.location && <div className="info-row"><dt>المكان</dt><dd>{p.location}</dd></div>}
@@ -60,12 +67,14 @@ function InboxDetail({ id }) {
         {p.price && <div className="info-row"><dt>السعر</dt><dd>{p.price}</dd></div>}
         {p.area && <div className="info-row"><dt>المساحة</dt><dd>{p.area}</dd></div>}
         {p.relation && <div className="info-row"><dt>صفته</dt><dd>{({ owner: 'المالك', broker: 'وسيط', other: 'أخرى' })[p.relation]}</dd></div>}
-        {m.message && <div className="info-row"><dt>الرسالة</dt><dd className="pre">{m.message}</dd></div>}
+        {m.message && <div className="info-row"><dt>{m.kind === 'interest' ? 'استفساره' : 'الرسالة'}</dt><dd className="pre">{m.message}</dd></div>}
+        {p.listing && <div className="info-row"><dt>بيانات العرض</dt><dd className="pre">{factLines(p.listing).join('\n')}</dd></div>}
       </dl>
+      {p.via === 'whatsapp' && <p className="hint">اختار الزبون «متابعة إلى واتساب» وفُتحت له رسالة جاهزة إلى رقمنا. فتح واتساب لا يعني أنه ضغط «إرسال»؛ إن لم تجد رسالته في واتساب فراسله من الزر أدناه.</p>}
       {m.kind === 'offer' && <Photos ownerType="inbox" ownerId={id} />}
       <div className="row-actions">
         <a className="btn btn-default btn-sm" href={telUrl(m.phone)}><Icon name="phone" size={16} /><span>اتصال</span></a>
-        <a className="btn btn-wa btn-sm" href={waUrl(m.phone, `السلام عليكم${m.name ? ' ' + m.name : ''}، وصلنا طلبك عبر الموقع${m.property_ref ? ' بخصوص العقار ' + m.property_ref : ''}.`)} target="_blank" rel="noopener"><Icon name="wa" size={16} /><span>واتساب</span></a>
+        <a className="btn btn-wa btn-sm" href={waUrl(m.phone, waText)} target="_blank" rel="noopener"><Icon name="wa" size={16} /><span>{facts ? 'مراسلة الزبون عبر واتساب' : 'واتساب'}</span></a>
       </div>
       {known && <p className="hint">هذا الرقم مسجل لـ <a href={href('people/' + known.person_id)}>{personLabel(known.person_id)}</a>.</p>}
     </Section>
