@@ -541,13 +541,59 @@ test('إضافة مخطط PDF من الهاتف: الممسوح يُضبط بن�
 
   // اسم عربي للمخطط يُبحث به
   await page.goto('/admin/#/settings?tab=plans');
-  await page.locator('.plan-row', { hasText: `Lotissement ${tag}` }).getByRole('button', { name: 'الاسم' }).click();
-  await page.getByLabel('الاسم كما تبحث به').fill(`المنارة ${tag}`);
-  await page.locator('.sheet').getByRole('button', { name: 'حفظ' }).click();
+  await page.locator('.plan-row', { hasText: `Lotissement ${tag}` }).getByRole('button', { name: 'تعديل' }).click();
+  const sh = page.locator('.sheet');
+  await sh.getByLabel('الاسم كما تبحث به').fill(`المنارة ${tag}`);
+  await expect(sh.getByLabel('المقاطعة', { exact: true })).toHaveValue('TVZ'); // مستنتجة من موقع المخطط
+  await sh.getByLabel('المنطقة أو الحي', { exact: true }).selectOption('+');
+  await sh.getByLabel('اسم المنطقة الجديدة').fill(`حي ${tag}`);
+  await sh.getByLabel('تحققت أن المخطط يتبع').check();
+  await sh.getByRole('button', { name: 'حفظ' }).click();
+  await expect(page.locator('.plan-row', { hasText: `المنارة ${tag}` })).toContainText(`حي ${tag}`);
   await page.goto('/admin/#/properties/map');
   await page.getByLabel('رقم القطعة').fill(`9110 منارة ${tag}`);
   await page.getByRole('button', { name: 'اعرض' }).click();
   await expect(page.locator('.lot-info')).toContainText(`قطعة 9110 · المنارة ${tag}`);
+
+  // الخانات المترابطة: المقاطعة ← المنطقة ← المخطط ← رقم القطعة
+  const ls = page.locator('.lot-search');
+  await expect(ls.getByLabel('المخطط', { exact: true })).toBeDisabled();
+  await ls.getByLabel('المقاطعة', { exact: true }).selectOption('TVZ');
+  const areaVal = await ls.getByLabel('المنطقة أو الحي', { exact: true }).locator('option', { hasText: `حي ${tag}` }).getAttribute('value');
+  await ls.getByLabel('المنطقة أو الحي', { exact: true }).selectOption(areaVal);
+  const planOpts = ls.getByLabel('المخطط', { exact: true }).locator('option');
+  await expect(planOpts).toHaveCount(2); // «كل المخططات» ومخطط هذه المنطقة وحده
+  const planVal = await planOpts.nth(1).getAttribute('value');
+  await ls.getByLabel('المخطط', { exact: true }).selectOption(planVal);
+  await page.getByLabel('رقم القطعة').fill('9104');
+  await page.getByRole('button', { name: 'اعرض' }).click();
+  await expect(page.locator('.lot-info')).toContainText(`قطعة 9104 · المنارة ${tag}`);
+  await expect(page.locator('.lot-info .tag')).toHaveText('من المخطط');
+  await expect(page.locator('.lot-side')).toHaveCount(4);
+  // رقم غير موجود في المخطط المختار: يُقال ذلك صراحة ولا يُعرض موقع
+  await page.getByLabel('رقم القطعة').fill('9999');
+  await page.getByRole('button', { name: 'اعرض' }).click();
+  await expect(page.locator('.form-msg')).toContainText(`القطعة 9999 غير موجودة في فهرس «المنارة ${tag}» (12 قطعة)`);
+  await expect(page.locator('.lot-info')).toHaveCount(0);
+  // تغيير المقاطعة يمسح المنطقة والمخطط
+  await ls.getByLabel('المقاطعة', { exact: true }).selectOption('');
+  await expect(ls.getByLabel('المنطقة أو الحي', { exact: true })).toHaveValue('');
+  await expect(ls.getByLabel('المخطط', { exact: true })).toHaveValue('');
+  await expect(ls.getByLabel('المخطط', { exact: true })).toBeDisabled();
+
+  // صورة القطعة من المخطط في صفحة العرض: عرض بلا صور يقترحها، وتُضاف إلى صوره
+  const { row: lotProp } = await api(page).post('/e/properties', { id: crypto.randomUUID(), deal: 'sale', type: 'land', wilaya_code: 'NKW', moughataa_code: 'TVZ', lot_number: '9103' });
+  await page.goto('/admin/#/properties/' + lotProp.id);
+  const np = page.locator('.no-photos');
+  await expect(np).toContainText('هذا العرض بلا صور');
+  await np.getByRole('button', { name: 'صورة القطعة من المخطط' }).click();
+  await expect(page.locator('.toasts')).toContainText('أُضيفت صورة القطعة 9103', { timeout: 30000 });
+  await expect(np).toHaveCount(0);
+  await waitSaved(page);
+  const snap = (await api(page).get('/sync')).data.files.find((x) => x.owner_id === lotProp.id && x.kind === 'photo');
+  expect(snap.name).toBe('lot-9103.jpg');
+  const meta = await sharp(await (await page.request.get('/api/admin/files/' + snap.id)).body()).metadata();
+  expect([meta.width, meta.height]).toEqual([1200, 900]);
 
   // إعادة إضافة الملف نفسه تُحدّث المخطط ولا تكرره
   await page.goto('/admin/#/settings?tab=plans');

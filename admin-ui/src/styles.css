@@ -389,3 +389,16 @@ textarea { resize: vertical; }
 .align-hint { font-weight: 600; }
 .lot-side span { background: rgba(255,255,255,.9); color: #4a2a7a; font-size: 11px; font-weight: 700; padding: 1px 4px; border-radius: 4px; white-space: nowrap; transform: translate(-50%, -50%); display: inline-block; border: 1px solid #c9b6e6; }
 .lot-info { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; margin-bottom: 8px; border: 1px solid var(--line); border-inline-start: 4px solid #7a4ab8; border-radius: 10px; background: var(--surface); }
+.no-photos { display: flex; gap: 8px 12px; align-items: center; flex-wrap: wrap; justify-content: space-between; background: var(--warn-bg, #fbf6e8); border: 1px solid var(--warn-border, #ecdcae); border-radius: 10px; padding: 8px 10px; margin-bottom: 10px; }
+@media (prefers-color-scheme: dark) { .no-photos { background: #2e2817; border-color: #574a25; } }
+.no-photos .np-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.photos + .btn { margin-top: 8px; }
+.lot-search { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; align-items: end; }
+.lot-search .field { margin: 0; min-width: 0; }
+.lot-search select, .lot-search input { width: 100%; min-width: 0; }
+.lot-search .lot-row { display: flex; gap: 6px; }
+.lot-search .lot-row input { flex: 1; }
+@media (max-width: 720px) { .lot-search { grid-template-columns: 1fr 1fr; } .lot-search .lot-field { grid-column: 1 / -1; } }
+.tag.prec-plan { background: #efe7f8; color: #4a2a7a; }
+.tag.prec-label, .tag.prec-approx { background: #fbf0d6; color: #7a5a00; }
+@media (prefers-color-scheme: dark) { .tag.prec-plan { background: #3a2c50; color: #e3d3fb; } .tag.prec-label, .tag.prec-approx { background: #4a3c14; color: #f6dd9a; } }

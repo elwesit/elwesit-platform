@@ -104,11 +104,12 @@ export function parseLotQuery(q) {
 // كلمات عربية تقابل ما يُكتب بالفرنسية في أسماء ملفات المخططات
 const SYN = { قطاع: ['sect', 'secteur', 'sector', 'سكتور'], سكتور: ['sect', 'secteur', 'قطاع'], توسعه: ['ext', 'extension'], شمال: ['nord'], جنوب: ['sud'], شرق: ['est'], غرب: ['ouest'], منطقه: ['zone'], مقاطعه: [] };
 const FILLER = new Set(['مخطط', 'في', 'من', 'حي', 'plan', 'lotissement', 'de', 'du', 'la', 'le']);
-export function planNameHit(plan, rest, moughataas = []) {
+export function planNameHit(plan, rest, moughataas = [], areas = []) {
   const words = norm(rest).split(' ').filter((w) => w && !LOT_WORD.test(w) && !FILLER.has(w));
   if (!words.length) return true;
   const m = moughataas.find((x) => x.code === plan.moughataa_code);
-  const hay = norm([plan.name, plan.lotissement, plan.source_name, m?.name_ar, m?.name_fr, ...(m?.aliases || [])].filter(Boolean).join(' ')).replace(/[_\-.]+/g, ' ');
+  const a = plan.area_id && areas.find((x) => x.id === plan.area_id);
+  const hay = norm([plan.name, plan.lotissement, plan.source_name, m?.name_ar, m?.name_fr, ...(m?.aliases || []), a?.name, ...(a?.aliases || [])].filter(Boolean).join(' ')).replace(/[_\-.]+/g, ' ');
   const tight = hay.replace(/\s+/g, '');
   const has = (w) => hay.includes(w) || tight.includes(w);
   const nums = hay.match(/\d+/g) || [];
@@ -119,11 +120,51 @@ export function planNameHit(plan, rest, moughataas = []) {
   });
 }
 
-export function searchPlanLots(plans, q, { moughataas = [] } = {}) {
+export function searchPlanLots(plans, q, { moughataas = [], areas = [] } = {}) {
   const { lot, rest } = parseLotQuery(q);
   if (!lot) return { lot: null, rest, hits: [], unmatched: false };
   const all = findPlanLots(plans, lot);
   if (!rest) return { lot, rest, hits: all, unmatched: false };
-  const hits = all.filter((h) => planNameHit(h.plan, rest, moughataas));
+  const hits = all.filter((h) => planNameHit(h.plan, rest, moughataas, areas));
   return hits.length ? { lot, rest, hits, unmatched: false } : { lot, rest, hits: all, unmatched: all.length > 0 };
+}
+
+// ---------- البحث بخانات مترابطة: المقاطعة ← المنطقة ← المخطط ← رقم القطعة ----------
+// مقاطعة المخطط إما أكدها المستخدم (place_verified) أو استُنتجت من موقعه على الخريطة فتبقى «غير مؤكدة».
+// المنطقة لا تُفترض: تُربط بالمخطط يدوياً، ولا تُنسب إلى مقاطعة إلا إن حددها المستخدم للحي نفسه.
+export const NO_AREA = '-';
+export function planCascade({ plans, areas = [], moughataas = [] }, { m, a } = {}) {
+  const ps = (plans || []).filter((p) => !p.archived_at);
+  const liveAreas = areas.filter((x) => !x.archived_at);
+  const mCount = {};
+  for (const p of ps) if (p.moughataa_code) mCount[p.moughataa_code] = (mCount[p.moughataa_code] || 0) + 1;
+  const mOpts = moughataas.filter((x) => mCount[x.code]).map((x) => ({ code: x.code, name: x.name_ar, count: mCount[x.code], unverified: ps.some((p) => p.moughataa_code === x.code && !p.place_verified) }))
+    .sort((x, y) => x.name.localeCompare(y.name, 'ar'));
+  const inM = m ? ps.filter((p) => p.moughataa_code === m) : [];
+  // مناطق المقاطعة: المسجلة فيها، والمرتبطة بمخطط فيها
+  const aIds = new Set(inM.map((p) => p.area_id).filter(Boolean));
+  const aOpts = m ? liveAreas.filter((x) => x.moughataa_code === m || aIds.has(x.id)).map((x) => ({ id: x.id, name: x.name, count: inM.filter((p) => p.area_id === x.id).length, linked: x.moughataa_code === m }))
+    .sort((x, y) => (y.count > 0) - (x.count > 0) || x.name.localeCompare(y.name, 'ar')) : [];
+  const orphan = inM.filter((p) => !p.area_id || !liveAreas.some((x) => x.id === p.area_id)).length;
+  if (orphan) aOpts.push({ id: NO_AREA, name: 'بلا منطقة محددة', count: orphan });
+  const aValid = a && aOpts.some((x) => x.id === a) ? a : null;
+  const pOpts = (aValid ? inM.filter((p) => (aValid === NO_AREA ? !p.area_id || !liveAreas.some((x) => x.id === p.area_id) : p.area_id === aValid)) : inM)
+    .slice().sort((x, y) => planLabel(x).localeCompare(planLabel(y), 'ar'));
+  return { moughataas: mOpts, areas: aOpts, plans: pOpts, m: mCount[m] ? m : null, a: aValid };
+}
+
+// كل مواضع الرقم داخل مخطط واحد (قد يتكرر الرقم في مخطط يجمع عدة تجزئات)
+export function lotsInPlan(plan, lot) {
+  const n = normLot(lot);
+  if (!n || !plan || !Array.isArray(plan.lots)) return [];
+  return plan.lots.filter((l) => normLot(l[0]) === n).map((l) => ({ plan, lot: l[0], lat: l[1], lng: l[2], status: l[3] || '', status_label: (plan.status_legend || {})[l[3]] || '', named: true, shape: lotShape(l) }));
+}
+
+// درجة الثقة في موقع القطعة، حتى لا يُعرض التقريبي على أنه مؤكد
+export function lotPrecision(hit) {
+  const g = hit.plan.georef;
+  if (g === 'geopdf' && hit.shape) return { level: 'plan', label: 'من المخطط', text: 'الحدود مرسومة من خطوط المخطط، وموقعها من إحداثيات ملف المخطط نفسه. دقتها دقة المخطط، وليست مسحاً ميدانياً.' };
+  if (g === 'geopdf') return { level: 'label', label: 'موضع الرقم فقط', text: 'هذا موضع رقم القطعة على المخطط. لم نستخرج حدودها من الملف، فالموقع داخل القطعة تقريباً وليس حدوداً مؤكدة.' };
+  if (g === 'points') return { level: 'approx', label: 'تقريبي', text: 'المخطط مضبوط يدوياً بنقطتين، فالموقع تقريبي وقد ينحرف أمتاراً. تحقق بالمعاينة.' };
+  return { level: 'approx', label: 'تقريبي', text: 'مصدر إحداثيات هذا المخطط غير معروف، فالموقع تقريبي.' };
 }
