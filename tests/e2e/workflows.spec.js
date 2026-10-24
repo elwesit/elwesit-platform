@@ -567,7 +567,7 @@ test('استفسر عبر واتساب: من بطاقة العرض ← حفظ ا
   const { settings } = await A.get('/settings');
   if (!settings.contact_whatsapp) await page.request.put('/api/admin/settings', { data: { contact_whatsapp: '26463808' }, headers: { 'x-wasit': '1' } });
   const ourWa = '222' + (settings.contact_whatsapp || '26463808').replace(/\D/g, '').slice(-8);
-  const { row } = await A.post('/e/properties', { id: crypto.randomUUID(), deal: 'sale', type: 'land', wilaya_code: 'NKW', moughataa_code: 'TVZ', area_m2: 450, price_amount: 2500000, price_currency: 'MRU' });
+  const { row } = await A.post('/e/properties', { id: crypto.randomUUID(), deal: 'sale', type: 'land', wilaya_code: 'NKW', moughataa_code: 'TVZ', lot_number: '7' + rnd().replace(/\D/g, '') + '1', area_m2: 450, price_amount: 2500000, price_currency: 'MRU' });
   expect((await A.post(`/properties/${row.id}/publish`, {})).ok).toBeTruthy();
   const title = row.title;
 
@@ -613,6 +613,7 @@ test('استفسر عبر واتساب: من بطاقة العرض ← حفظ ا
   await page.goto('/admin/#/inbox');
   await page.getByRole('link', { name: new RegExp(name) }).click();
   await expect(page.locator('#main')).toContainText('هل يوجد سند ملكية؟');
+  await expect(page.locator('.info-row').filter({ hasText: 'العقار' }).first()).toContainText(`قطعة ${row.lot_number}`); // رقم القطعة الحقيقي في الإدارة
   await expect(page.locator('#main')).toContainText('لا يعني أنه ضغط «إرسال»');
   const reply = page.getByRole('link', { name: 'مراسلة الزبون عبر واتساب' });
   const href = await reply.getAttribute('href');

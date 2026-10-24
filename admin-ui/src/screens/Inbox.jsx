@@ -57,7 +57,9 @@ function InboxDetail({ id }) {
     <Section title="ما أرسله">
       <dl className="info">
         <div className="info-row"><dt>الهاتف</dt><dd dir="ltr">{m.phone} {p.contact_pref && <small className="muted">(يفضّل {p.contact_pref === 'call' ? 'الاتصال' : 'واتساب'})</small>}</dd></div>
-        {m.property_ref && <div className="info-row"><dt>العقار</dt><dd>{prop ? <a href={href('properties/' + prop.id)}>{m.property_ref}</a> : m.property_ref}</dd></div>}
+        {m.property_ref && <div className="info-row"><dt>العقار</dt><dd>{prop?.lot_number
+          ? <><a href={href('properties/' + prop.id)}>قطعة {prop.lot_number}</a>{[prop.plan, prop.sector].filter(Boolean).length ? ' · ' + [prop.plan, prop.sector].filter(Boolean).join(' · ') : ''} <small className="muted">(رقم العرض {m.property_ref})</small></>
+          : prop ? <a href={href('properties/' + prop.id)}>{m.property_ref}</a> : m.property_ref}</dd></div>}
         {p.deal && <div className="info-row"><dt>العملية</dt><dd>{DEALS[p.deal]}</dd></div>}
         {p.type && <div className="info-row"><dt>النوع</dt><dd>{TYPES[p.type]}</dd></div>}
         {p.location && <div className="info-row"><dt>المكان</dt><dd>{p.location}</dd></div>}
