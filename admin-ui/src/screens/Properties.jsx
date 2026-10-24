@@ -2,7 +2,8 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { useTable, useRow, create, update, archive, call, api, storeSnapshot, useStore, getState, table } from '../data.js';
 import { fieldsFor, cleanupFor } from '@shared/typeFields.js';
 import { Btn, Field, Input, NumInput, Select, Seg, Chips, Toggle, TextArea, Sheet, Section, Empty, KindTag, Pending, Icon, LinkBtn, useToast, Confirm } from '../ui.jsx';
-import { Missing, PersonPicker, GeoFields, PriceFields, NextStep, ContactActions, Timeline, Photos, InfoRow, SplitLayout, useSettings, loadLeaflet, tileLayer, pinIcon, zonesLayer, zoneNames } from '../components.jsx';
+import { Missing, PersonPicker, GeoFields, PriceFields, NextStep, ContactActions, Timeline, Photos, InfoRow, SplitLayout, useSettings, loadLeaflet, tileLayer, pinIcon, zonesLayer, zoneNames, attachPlans } from '../components.jsx';
+import { findPlanLots, planLabel } from '@shared/plans.js';
 import { zoneAt, lotLabel, NKC_ZONES } from '@shared/nouakchottZones.js';
 import MapPicker from '../MapPicker.jsx';
 import { TYPES, DEALS, AVAILABILITY, FEATURES, SENT_RESPONSE } from '@shared/vocab.js';
@@ -137,7 +138,7 @@ function PropertyDetail({ id, tab }) {
         </Section>
         <Section title="الموقع على الخريطة" actions={<Btn small icon="pin" onClick={() => setShowMap(true)}>{p.lat != null ? 'تعديل' : 'حدد الموقع'}</Btn>}>
           {p.lat != null ? <MiniMap p={p} /> : <p className="muted">لا يوجد موقع على الخريطة. يمكن التسجيل والمتابعة بدونه.</p>}
-          {p.lat != null && <p className="hint">{p.location_precision === 'exact' ? 'موقع دقيق' : 'موقع تقريبي'} · أُدخل {({ pin: 'بعلامة على الخريطة', gps: 'من موقع الهاتف', coords: 'بالإحداثيات', link: 'من رابط' })[p.location_method] || ''} · <a href={`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`} target="_blank" rel="noopener">الاتجاهات</a></p>}
+          {p.lat != null && <p className="hint">{p.location_precision === 'exact' ? 'موقع دقيق' : 'موقع تقريبي'} · أُدخل {({ pin: 'بعلامة على الخريطة', gps: 'من موقع الهاتف', coords: 'بالإحداثيات', link: 'من رابط', plan: 'من مخطط التجزئة' })[p.location_method] || ''} · <a href={`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`} target="_blank" rel="noopener">الاتجاهات</a></p>}
           <Geometries property={p} />
         </Section>
         <Section title="الصور" collapsible>
@@ -172,6 +173,7 @@ function MiniMap({ p }) {
       map = L.map(ref.current, { scrollWheelZoom: false }).setView([p.lat, p.lng], 16);
       tileLayer(L, settings).addTo(map); map.attributionControl.setPrefix(false);
       if (zoneAt(p.lat, p.lng)) zonesLayer(L, { names: zoneNames(table('moughataas')), highlight: p.moughataa_code }).addTo(map);
+      attachPlans(L, map, table('plans'));
       const mk = L.marker([p.lat, p.lng], { icon: pinIcon(L) }).addTo(map);
       if (lotLabel(p)) mk.bindTooltip(lotLabel(p), { permanent: true, direction: 'top', offset: [0, -28], className: 'lot-label' });
     });
@@ -367,8 +369,11 @@ function PlanMap() {
   const settings = useSettings();
   const props = useTable('properties');
   const moughataas = useTable('moughataas');
+  const plans = useTable('plans');
   const [q, setQ] = useState('');
   const [msg, setMsg] = useState(null);
+  const [hits, setHits] = useState([]);
+  const [opacity, setOpacity] = useState(0.85);
   const live = useMemo(() => props.filter((p) => !p.archived_at), [props]);
   const placed = live.filter((p) => p.lat != null);
   // العروض بلا موقع على الخريطة تُعدّ في مقاطعتها
@@ -386,6 +391,7 @@ function PlanMap() {
       tileLayer(L, settings).addTo(map); map.attributionControl.setPrefix(false);
       map.attributionControl.addAttribution('حدود المقاطعات تقريبية: geoBoundaries / OCHA');
       zonesLayer(L, { names: zoneNames(moughataas), counts }).addTo(map);
+      const pl = attachPlans(L, map, plans, { opacity });
       layer = L.layerGroup().addTo(map);
       const markers = {};
       for (const p of placed) {
@@ -394,20 +400,33 @@ function PlanMap() {
         mk.bindTooltip(lbl, { permanent: true, direction: 'top', offset: [0, -28], className: 'lot-label' });
         markers[p.id] = mk;
       }
-      mapRef.current = { map, markers };
+      mapRef.current = { map, markers, L, pl, found: L.layerGroup().addTo(map) };
       setTimeout(() => map.invalidateSize(), 200);
     });
     return () => map?.remove();
-  }, [placed.length, moughataas.length]); // eslint-disable-line
+  }, [placed.length, moughataas.length, plans.map((p) => p.id + p.visible + (p.archived_at || '')).join()]); // eslint-disable-line
+  useEffect(() => { mapRef.current?.pl?.setOpacity(opacity); }, [opacity]);
+  const showLot = (h) => {
+    const m = mapRef.current; if (!m) return;
+    m.found.clearLayers();
+    m.L.marker([h.lat, h.lng], { icon: pinIcon(m.L, '#7a4ab8') }).addTo(m.found)
+      .bindTooltip(`قطعة ${h.lot} · ${planLabel(h.plan)}${h.status_label ? ' · ' + h.status_label : ''}`, { permanent: true, direction: 'top', offset: [0, -28], className: 'lot-label' });
+    m.map.setView([h.lat, h.lng], 18);
+  };
   const find = (e) => {
     e.preventDefault();
     const lot = normLot(q); const nq = norm(q);
     if (!lot && !nq) return;
-    const hits = live.filter((p) => (lot && p.lot_norm === lot) || norm(p.ref) === nq);
-    const onMap = hits.filter((p) => p.lat != null);
-    if (!hits.length) { setMsg('لا يوجد عرض بهذا الرقم.'); return; }
-    if (!onMap.length) { setMsg(`وُجد ${hits.length} عرض بهذا الرقم لكن بلا موقع على الخريطة.`); return; }
+    // القطعة في مخططات التجزئة المستوردة
+    const ph = findPlanLots(plans, q);
+    setHits(ph);
+    if (ph.length) showLot(ph[0]);
+    const found = live.filter((p) => (lot && p.lot_norm === lot) || norm(p.ref) === nq);
+    const onMap = found.filter((p) => p.lat != null);
+    if (!found.length) { setMsg(ph.length ? null : 'لا يوجد عرض ولا قطعة في المخططات بهذا الرقم.'); return; }
+    if (!onMap.length) { setMsg(`وُجد ${found.length} عرض بهذا الرقم لكن بلا موقع على الخريطة.`); return; }
     const m = mapRef.current; if (!m) return;
+    if (ph.length) { setMsg(`وأيضاً ${onMap.length} عرض مسجل بهذا الرقم: ${onMap.map((p) => lotLabel(p) || p.ref).join('، ')}`); return; }
     m.map.setView([onMap[0].lat, onMap[0].lng], 17);
     setMsg(onMap.length > 1 ? `${onMap.length} عروض بهذا الرقم (في مخططات/قطاعات مختلفة): ${onMap.map((p) => lotLabel(p) || p.ref).join('، ')}` : lotLabel(onMap[0]) || onMap[0].ref);
   };
@@ -417,9 +436,11 @@ function PlanMap() {
       <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="ابحث برقم القطعة أو المرجع" aria-label="رقم القطعة" dir="auto" />
       <Btn small type="submit">اعرض</Btn>
     </form>
+    {hits.length > 0 && <div className="plan-hits">{hits.length > 1 && <small className="muted">الرقم موجود في {hits.length} مخططات:</small>}{hits.map((h) => <button type="button" key={h.plan.id} className="chip" onClick={() => showLot(h)}>قطعة {h.lot} · {planLabel(h.plan)}{h.status_label ? ` (${h.status_label})` : ''}</button>)}</div>}
     {msg && <p className="form-msg">{msg}</p>}
     <div ref={ref} className="map map-plan" />
-    <p className="hint">الأرقام بجانب أسماء المقاطعات = عدد العروض فيها. فوق كل علامة: رقم القطعة / القطاع. اضغط العلامة لفتح العرض.{unplaced > 0 && ` ${unplaced} عرض في نواكشوط بلا موقع على الخريطة.`} حدود المقاطعات تقريبية وليست حدوداً عقارية رسمية.</p>
+    {plans.some((p) => !p.archived_at && p.image_file_id) && <label className="inline-check opacity-ctl">شفافية المخططات <input type="range" min="0.2" max="1" step="0.05" value={opacity} onChange={(e) => setOpacity(+e.target.value)} /></label>}
+    <p className="hint">الأرقام بجانب أسماء المقاطعات = عدد العروض فيها. فوق كل علامة: رقم القطعة / القطاع. اضغط العلامة لفتح العرض. مخططات التجزئة تظهر عند التقريب داخل إطارها، وتُضاف من الإعدادات.{unplaced > 0 && ` ${unplaced} عرض في نواكشوط بلا موقع على الخريطة.`} حدود المقاطعات تقريبية وليست حدوداً عقارية رسمية.</p>
   </div>;
 }
 
@@ -449,11 +470,21 @@ export function PropertyForm({ initial, onDone }) {
   // تغيير النوع أو العملية يُفرغ القيم التي لم تعد مناسبة (الغرف لأرض، النمرة لإيجار شقة…)
   const choose = (patch) => setV((x) => { const n = { ...x, ...patch }; return { ...n, ...cleanupFor(n) }; });
   // اقتراحات المخطط والقطاع من العروض المسجلة في المقاطعة نفسها فقط
+  const plans = useTable('plans');
   const known = useMemo(() => {
     const ps = table('properties').filter((p) => !p.archived_at && v.moughataa_code && p.moughataa_code === v.moughataa_code);
     const uniq = (k) => [...new Set(ps.map((p) => p[k]).filter(Boolean))].slice(0, 30);
-    return { plans: uniq('plan'), sectors: uniq('sector') };
-  }, [v.moughataa_code]);
+    const fromPlans = plans.filter((p) => !p.archived_at && (!v.moughataa_code || !p.moughataa_code || p.moughataa_code === v.moughataa_code)).map(planLabel);
+    return { plans: [...new Set([...fromPlans, ...uniq('plan')])], sectors: uniq('sector') };
+  }, [v.moughataa_code, plans]);
+  // رقم القطعة موجود في مخطط مستورد ← نقترح وضع الموقع عليها مباشرة
+  const planHits = useMemo(() => (f.lot && v.lot_number ? findPlanLots(plans, v.lot_number, { plan: v.plan, moughataa_code: v.moughataa_code }) : []), [f.lot, v.lot_number, v.plan, v.moughataa_code, plans]);
+  const onPlanLot = (h) => v.lat != null && Math.abs(v.lat - h.lat) < 2e-5 && Math.abs(v.lng - h.lng) < 2e-5;
+  const usePlanLot = (h) => {
+    const mc = v.moughataa_code || h.plan.moughataa_code || zoneAt(h.lat, h.lng);
+    const wc = mc ? table('moughataas').find((m) => m.code === mc)?.wilaya_code : v.wilaya_code;
+    set({ lat: h.lat, lng: h.lng, location_method: 'plan', location_precision: 'exact', plan: v.plan || planLabel(h.plan), moughataa_code: mc || null, wilaya_code: wc || v.wilaya_code || null });
+  };
   const extraCount = ['title', 'landmark', 'location_desc', 'frontage', 'bathrooms', 'floors', 'price_raw', 'price_terms', 'description'].filter((k) => v[k] != null && v[k] !== '').length + (v.features?.length ? 1 : 0) + (v.price_negotiable ? 1 : 0);
   return <div className="page form-page">
     <div className="page-head"><h1>{isNew ? 'عرض جديد' : `تعديل ${initial.ref}`}</h1></div>
@@ -470,6 +501,14 @@ export function PropertyForm({ initial, onDone }) {
         <Field label="رقم القطعة (النمرة)"><Input value={v.lot_number} onChange={(x) => set({ lot_number: x })} dir="auto" /></Field>
         <datalist id="dl-plans">{known.plans.map((x) => <option key={x} value={x} />)}</datalist>
         <datalist id="dl-sectors">{known.sectors.map((x) => <option key={x} value={x} />)}</datalist>
+      </div>}
+      {planHits.length > 0 && <div className="plan-hits">
+        {planHits.some(onPlanLot)
+          ? <small className="ok-text">✓ الموقع على القطعة {v.lot_number} من مخطط «{planLabel(planHits.find(onPlanLot).plan)}»{planHits.find(onPlanLot).status_label ? ` · ${planHits.find(onPlanLot).status_label}` : ''}</small>
+          : <>
+            <small className="muted">القطعة {v.lot_number} موجودة في {planHits.length > 1 ? `${planHits.length} مخططات، اختر الصحيح:` : 'مخطط مستورد:'}</small>
+            {planHits.map((h) => <button type="button" key={h.plan.id} className="chip" onClick={() => usePlanLot(h)}>ضع الموقع على القطعة · {planLabel(h.plan)}{h.status_label ? ` (${h.status_label})` : ''}</button>)}
+          </>}
       </div>}
       <div className="row-actions"><Btn icon="pin" onClick={() => setShowMap(true)}>{v.lat != null ? `على الخريطة: ${v.lat.toFixed(4)}, ${v.lng.toFixed(4)} (${v.location_precision === 'exact' ? 'دقيق' : 'تقريبي'})` : 'حدد على الخريطة (اختياري)'}</Btn></div>
     </fieldset>

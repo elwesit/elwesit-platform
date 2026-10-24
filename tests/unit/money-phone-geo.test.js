@@ -59,3 +59,17 @@ test('مخطط نواكشوط: المقاطعة من موقع العلامة', a
   assert.equal(zoneAt(null, null), null);
   assert.equal(lotLabel({ lot_number: '123', sector: 'C', plan: '' }), 'قطعة 123 · قطاع C');
 });
+
+test('مخططات التجزئة: قراءة الحزمة والبحث عن القطعة', async () => {
+  const { parsePlanPackage, findPlanLots } = await import('../../shared/plans.js');
+  assert.throws(() => parsePlanPackage('{}'), /حزمة/);
+  assert.throws(() => parsePlanPackage(JSON.stringify({ format: 'wasit-plan/1', image: 'data:image/png;base64,AA', bounds: [2, 0, 1, 1] })), /حدود/);
+  const { row } = parsePlanPackage(JSON.stringify({ format: 'wasit-plan/1', lotissement: 'EXT F NORD SECTEUR 9', moughataa_code: 'TVZ', lots: [[1065, 18.1, -15.9, 'libre'], ['bad']], status_legend: { libre: 'غير ممنوحة' } }));
+  assert.deepEqual(row.lots, [['1065', 18.1, -15.9, 'libre']]);
+  const plans = [{ id: 'a', ...row }, { id: 'b', lotissement: 'MANARA', moughataa_code: 'TVZ', lots: [['1065', 18.2, -15.8]] }, { id: 'c', lotissement: 'X', moughataa_code: 'ARF', lots: [['1065', 18, -15]] }, { id: 'd', lotissement: 'Y', lots: [['1065', 1, 1]], archived_at: 'x' }];
+  assert.equal(findPlanLots(plans, '١٠٦٥').length, 3); // أرقام عربية، والمؤرشف مستبعد
+  assert.deepEqual(findPlanLots(plans, '1065', { moughataa_code: 'TVZ' }).map((h) => h.plan.id), ['a', 'b']);
+  const named = findPlanLots(plans, '1065', { plan: 'ext f nord secteur 9' });
+  assert.equal(named.length, 1);
+  assert.equal(named[0].status_label, 'غير ممنوحة');
+});

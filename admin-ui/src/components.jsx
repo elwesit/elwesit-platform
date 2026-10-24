@@ -298,6 +298,26 @@ export function zonesLayer(L, { names = {}, counts = {}, highlight = null, onCli
   }
   return g;
 }
+// مخططات التجزئة المستوردة: إطار واسمه عند التصغير، والصورة نفسها عند التقريب داخل حدودها فقط (توفيراً للذاكرة على الهاتف)
+export function attachPlans(L, map, plans, { opacity = 0.85, minZoom = 14 } = {}) {
+  const g = L.layerGroup().addTo(map);
+  const shown = (plans || []).filter((p) => !p.archived_at && p.visible && p.image_file_id && p.south != null);
+  const frames = {}; const imgs = {};
+  let op = opacity;
+  const sync = () => {
+    const b = map.getBounds(); const z = map.getZoom();
+    for (const p of shown) {
+      const pb = L.latLngBounds([p.south, p.west], [p.north, p.east]);
+      const near = z >= minZoom && b.intersects(pb);
+      if (near && !imgs[p.id]) imgs[p.id] = L.imageOverlay(fileUrl({ id: p.image_file_id }), pb, { opacity: op, interactive: false, className: 'plan-img' }).addTo(g);
+      if (!near && imgs[p.id]) { g.removeLayer(imgs[p.id]); delete imgs[p.id]; }
+      if (!near && !frames[p.id]) frames[p.id] = L.rectangle(pb, { color: '#7a4ab8', weight: 1.5, dashArray: '4 3', fillOpacity: 0.04, interactive: false }).bindTooltip(p.lotissement || p.name, { permanent: true, direction: 'center', className: 'plan-label' }).addTo(g);
+      if (near && frames[p.id]) { g.removeLayer(frames[p.id]); delete frames[p.id]; }
+    }
+  };
+  map.on('moveend', sync); sync();
+  return { setOpacity: (o) => { op = o; for (const i of Object.values(imgs)) i.setOpacity(o); }, remove: () => { map.off('moveend', sync); map.removeLayer(g); } };
+}
 export const zoneNames = (moughataas) => Object.fromEntries(moughataas.filter((m) => NKC_ZONES[m.code]).map((m) => [m.code, m.name_ar]));
 
 export function InfoRow({ label, children }) {

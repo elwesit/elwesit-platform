@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Sheet, Btn, Field, Input, Seg, useToast } from './ui.jsx';
-import { loadLeaflet, tileLayer, pinIcon, useSettings, zonesLayer, zoneNames } from './components.jsx';
+import { loadLeaflet, tileLayer, pinIcon, useSettings, zonesLayer, zoneNames, attachPlans } from './components.jsx';
 import { zoneAt } from '@shared/nouakchottZones.js';
 import { parseLocation } from '@shared/geolink.js';
 import { api, getState } from './data.js';
@@ -37,6 +37,7 @@ export default function MapPicker({ value, onSave, onClose }) {
       tileLayer(L, settings).addTo(map);
       map.attributionControl.setPrefix(false);
       zonesLayer(L, { names: zoneNames(table('moughataas')), highlight: value.moughataa_code }).addTo(map);
+      attachPlans(L, map, table('plans'));
       mapRef.current = { map, L };
       if (pos) markerRef.current = L.marker([pos.lat, pos.lng], { icon: pinIcon(L), draggable: true }).addTo(map).on('dragend', (e) => { const p = e.target.getLatLng(); setPos({ lat: +p.lat.toFixed(6), lng: +p.lng.toFixed(6) }); setMethod('pin'); });
       map.on('click', (e) => { place(e.latlng.lat, e.latlng.lng, 'pin', false); });

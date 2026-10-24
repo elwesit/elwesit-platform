@@ -1,19 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { useStore, saveSettings, useTable, create, update, archive, api, logout, loadSettings } from '../data.js';
+import { useStore, saveSettings, useTable, create, update, archive, api, logout, loadSettings, uploadFile, fileUrl, uuid } from '../data.js';
+import { parsePlanPackage, planLabel } from '@shared/plans.js';
 import { Btn, Field, Input, NumInput, TextArea, Section, Seg, Select, useToast, Sheet, LinkBtn, Icon } from '../ui.jsx';
 import { href } from '../router.js';
 import { fmtDateTime } from '../fmt.js';
 
-export default function Settings() {
+export default function Settings({ route }) {
   const s = useStore();
-  const [tab, setTab] = useState('site');
+  const [tab, setTab] = useState(route?.query?.tab || 'site');
   useEffect(() => { loadSettings(); }, []);
   return <div className="page settings">
     <div className="page-head"><h1>الإعدادات</h1></div>
-    <Seg value={tab} onChange={setTab} options={[['site', 'الموقع والتواصل'], ['templates', 'القوالب'], ['areas', 'الأحياء'], ['data', 'البيانات'], ['account', 'الحساب'], ['integrations', 'واتساب']]} />
+    <Seg value={tab} onChange={setTab} options={[['site', 'الموقع والتواصل'], ['templates', 'القوالب'], ['areas', 'الأحياء'], ['plans', 'المخططات'], ['data', 'البيانات'], ['account', 'الحساب'], ['integrations', 'واتساب']]} />
     {tab === 'site' && (s.settings ? <SiteSettings settings={s.settings} /> : <p className="muted">الإعدادات تحتاج اتصالاً للتحميل.</p>)}
     {tab === 'templates' && <Templates />}
     {tab === 'areas' && <Areas />}
+    {tab === 'plans' && <Plans />}
     {tab === 'data' && <DataTools />}
     {tab === 'account' && <Account />}
     {tab === 'integrations' && <WhatsApp />}
@@ -91,6 +93,59 @@ function Areas() {
       <Field label="أسماء بديلة (افصل بفاصلة)"><Input value={(edit.aliases || []).join('، ')} onChange={(x) => setEdit({ ...edit, aliases: x.split(/[،,]/).map((y) => y.trim()).filter(Boolean) })} /></Field>
       <Field label="النوع"><Seg value={edit.kind} onChange={(x) => setEdit({ ...edit, kind: x })} options={[['area', 'حي/منطقة'], ['landmark', 'معلم'], ['plan', 'مخطط']]} /></Field>
       <Field label="المقاطعة (اختياري — فقط إن كنت متأكداً)"><Select value={edit.moughataa_code} onChange={(x) => setEdit({ ...edit, moughataa_code: x })} placeholder="غير محددة" options={[...wilayas].sort((a, b) => a.sort - b.sort).map((w) => ({ label: w.name_ar, options: moughataas.filter((m) => m.wilaya_code === w.code).map((m) => [m.code, m.name_ar]) }))} /></Field>
+    </Sheet>}
+  </Section>;
+}
+
+// مخططات التجزئة: تُستورد كحزم (.wasitplan.json) فيها صورة مضبوطة على الخريطة وفهرس القطع
+function Plans() {
+  const plans = useTable('plans').filter((p) => !p.archived_at).sort((a, b) => (a.lotissement || a.name).localeCompare(b.lotissement || b.name));
+  const moughataas = useTable('moughataas');
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [del, setDel] = useState(null);
+  const importFiles = async (files) => {
+    setBusy(true);
+    let ok = 0;
+    for (const file of files) {
+      try {
+        const { row, image } = parsePlanPackage(await file.text());
+        const dup = plans.find((p) => p.name === row.name && p.lotissement === row.lotissement);
+        if (dup) { toast(`«${planLabel(row)}» مستورد من قبل`, 'err'); continue; }
+        const id = uuid();
+        let image_file_id = null;
+        if (image) {
+          const [head, b64] = image.split(',');
+          const bin = atob(b64); const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          const type = head.slice(5).split(';')[0];
+          image_file_id = await uploadFile(new File([bytes], (row.lotissement || 'plan') + '.' + type.split('/')[1], { type }), { kind: 'document', owner_type: 'plan', owner_id: id });
+        }
+        create('plans', { ...row, id, image_file_id });
+        ok++;
+      } catch (e) { toast(`${file.name}: ${e.message}`, 'err'); }
+    }
+    setBusy(false);
+    if (ok) toast(`استُورد ${ok} مخطط`);
+  };
+  return <Section title="مخططات التجزئة">
+    <p className="hint">كل مخطط يظهر فوق الخريطة في مكانه، وأرقام قطعه قابلة للبحث: اكتب رقم القطعة في العرض فيقترح البرنامج موقعها. المخططات خاصة بك ولا تظهر للزوار.</p>
+    {plans.length === 0 && <p className="muted">لا توجد مخططات بعد.</p>}
+    {plans.map((p) => <div key={p.id} className="plan-row">
+      <div>
+        <b>{p.name || planLabel(p)}</b>
+        <small className="muted block">{[p.lotissement, moughataas.find((m) => m.code === p.moughataa_code)?.name_ar, p.lots?.length ? `${p.lots.length} قطعة` : 'بلا فهرس قطع', p.source_date && `بتاريخ ${p.source_date}`, p.georef === 'geopdf' ? 'إحداثيات من الملف نفسه' : p.georef === 'points' ? 'مضبوط بنقاط مرجعية' : ''].filter(Boolean).join(' · ')}</small>
+        {p.source_name && <small className="muted block">المصدر: {p.source_name}</small>}
+      </div>
+      {p.image_file_id && <label className="inline-check"><input type="checkbox" checked={!!p.visible} onChange={(e) => update('plans', p.id, { visible: e.target.checked })} /> يظهر على الخريطة</label>}
+      {p.image_file_id && <a className="btn btn-default btn-sm" href={fileUrl({ id: p.image_file_id })} target="_blank" rel="noopener">الصورة</a>}
+      <Btn small kind="ghost" onClick={() => setDel(p)}>حذف</Btn>
+    </div>)}
+    <div className="row-actions">
+      <label className={`btn btn-default upload-btn${busy ? ' disabled' : ''}`}>{busy ? 'جارٍ الاستيراد…' : 'استيراد مخطط (.wasitplan.json)'}<input type="file" accept=".json,application/json" multiple hidden disabled={busy} onChange={(e) => { importFiles([...e.target.files]); e.target.value = ''; }} /></label>
+    </div>
+    {del && <Sheet title="حذف المخطط" onClose={() => setDel(null)} footer={<><Btn onClick={() => setDel(null)}>إلغاء</Btn><Btn kind="primary" onClick={() => { archive('plans', del.id); setDel(null); }}>حذف</Btn></>}>
+      <p>حذف «{del.name || planLabel(del)}» من الخريطة والبحث؟ مواقع العروض التي وُضعت منه تبقى كما هي.</p>
     </Sheet>}
   </Section>;
 }
