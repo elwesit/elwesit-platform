@@ -29,7 +29,8 @@
     "@vitejs/plugin-react": "^6.1.2",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "vite": "^8.3.5"
+    "vite": "^8.3.5",
+    "pdfjs-dist": "^6.4.299"
   },
   "type": "module",
   "private": true,

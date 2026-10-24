@@ -3,7 +3,7 @@ import { useTable, useRow, create, update, archive, call, api, storeSnapshot, us
 import { fieldsFor, cleanupFor } from '@shared/typeFields.js';
 import { Btn, Field, Input, NumInput, Select, Seg, Chips, Toggle, TextArea, Sheet, Section, Empty, KindTag, Pending, Icon, LinkBtn, useToast, Confirm } from '../ui.jsx';
 import { Missing, PersonPicker, GeoFields, PriceFields, NextStep, ContactActions, Timeline, Photos, InfoRow, SplitLayout, useSettings, loadLeaflet, tileLayer, pinIcon, zonesLayer, zoneNames, attachPlans } from '../components.jsx';
-import { findPlanLots, planLabel } from '@shared/plans.js';
+import { findPlanLots, planLabel, hitTag, hitPlanCount } from '@shared/plans.js';
 import { zoneAt, lotLabel, NKC_ZONES } from '@shared/nouakchottZones.js';
 import MapPicker from '../MapPicker.jsx';
 import { TYPES, DEALS, AVAILABILITY, FEATURES, SENT_RESPONSE } from '@shared/vocab.js';
@@ -436,7 +436,7 @@ function PlanMap() {
       <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="ابحث برقم القطعة أو المرجع" aria-label="رقم القطعة" dir="auto" />
       <Btn small type="submit">اعرض</Btn>
     </form>
-    {hits.length > 0 && <div className="plan-hits">{hits.length > 1 && <small className="muted">الرقم موجود في {hits.length} مخططات:</small>}{hits.map((h) => <button type="button" key={h.plan.id} className="chip" onClick={() => showLot(h)}>قطعة {h.lot} · {planLabel(h.plan)}{h.status_label ? ` (${h.status_label})` : ''}</button>)}</div>}
+    {hits.length > 0 && <div className="plan-hits">{hits.length > 1 && <small className="muted">{hitPlanCount(hits) > 1 ? `الرقم موجود في ${hitPlanCount(hits)} مخططات:` : `الرقم مكرر ${hits.length} مرات في المخطط:`}</small>}{hits.map((h, i) => <button type="button" key={i} className="chip" onClick={() => showLot(h)}>قطعة {h.lot} · {planLabel(h.plan)}{hitTag(hits, i)}{h.status_label ? ` (${h.status_label})` : ''}</button>)}</div>}
     {msg && <p className="form-msg">{msg}</p>}
     <div ref={ref} className="map map-plan" />
     {plans.some((p) => !p.archived_at && p.image_file_id) && <label className="inline-check opacity-ctl">شفافية المخططات <input type="range" min="0.2" max="1" step="0.05" value={opacity} onChange={(e) => setOpacity(+e.target.value)} /></label>}
@@ -506,8 +506,8 @@ export function PropertyForm({ initial, onDone }) {
         {planHits.some(onPlanLot)
           ? <small className="ok-text">✓ الموقع على القطعة {v.lot_number} من مخطط «{planLabel(planHits.find(onPlanLot).plan)}»{planHits.find(onPlanLot).status_label ? ` · ${planHits.find(onPlanLot).status_label}` : ''}</small>
           : <>
-            <small className="muted">القطعة {v.lot_number} موجودة في {planHits.length > 1 ? `${planHits.length} مخططات، اختر الصحيح:` : 'مخطط مستورد:'}</small>
-            {planHits.map((h) => <button type="button" key={h.plan.id} className="chip" onClick={() => usePlanLot(h)}>ضع الموقع على القطعة · {planLabel(h.plan)}{h.status_label ? ` (${h.status_label})` : ''}</button>)}
+            <small className="muted">القطعة {v.lot_number} موجودة في {planHits.length > 1 ? `${hitPlanCount(planHits) > 1 ? `${hitPlanCount(planHits)} مخططات` : 'أكثر من موضع'}، اختر الصحيح:` : 'مخطط مستورد:'}</small>
+            {planHits.map((h, i) => <button type="button" key={i} className="chip" onClick={() => usePlanLot(h)}>ضع الموقع على القطعة · {planLabel(h.plan)}{hitTag(planHits, i)}{h.status_label ? ` (${h.status_label})` : ''}</button>)}
           </>}
       </div>}
       <div className="row-actions"><Btn icon="pin" onClick={() => setShowMap(true)}>{v.lat != null ? `على الخريطة: ${v.lat.toFixed(4)}, ${v.lng.toFixed(4)} (${v.location_precision === 'exact' ? 'دقيق' : 'تقريبي'})` : 'حدد على الخريطة (اختياري)'}</Btn></div>
