@@ -27,10 +27,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (none) list.push([NO_AREA, `بلا منطقة محددة (${none})`]);
     opts(selA, list.length ? 'كل المناطق' : 'لا مناطق محددة', list);
     selA.disabled = !selM.value;
+    if (list.length === 1 && selM.value) selA.value = list[0][0];
   }
   function fillP() {
-    opts(selP, 'اختر المخطط', inA().map((p) => [p.id, p.label + (p.verified ? '' : ' (المقاطعة تقديرية)')]));
+    const list = inA();
+    opts(selP, 'اختر المخطط', list.map((p) => [p.id, p.label + (p.verified ? '' : ' (المقاطعة تقديرية)')]));
     selP.disabled = !selM.value;
+    // خيار واحد فقط: يُختار تلقائياً فلا يحتاج الزائر إلى لمسة إضافية على الهاتف
+    if (list.length === 1 && selM.value) selP.value = list[0].id;
   }
   const clear = () => { card.hidden = true; card.innerHTML = ''; layer?.clearLayers(); say('', ''); };
   selM.addEventListener('change', () => { fillA(); fillP(); clear(); });
@@ -39,6 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function ensureMap() {
     if (map) return;
+    $('#lot-map').hidden = false;
     const L = await window.wasitMap.loadLeaflet();
     map = window.wasitMap.baseMap($('#lot-map'));
     layer = L.layerGroup().addTo(map);
@@ -103,7 +108,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   fetch('/api/public/lots/plans', { headers: { Accept: 'application/json' } }).then((r) => r.json()).then((j) => {
     plans = j.plans || [];
-    fillM(); fillA(); fillP();
+    fillM();
+    if (selM.options.length === 2) selM.selectedIndex = 1;
+    fillA(); fillP();
     // رابط مشاركة: ?plan=…&lot=…
     const q = new URLSearchParams(location.search), p = plans.find((x) => x.id === q.get('plan'));
     if (p) {

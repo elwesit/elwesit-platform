@@ -231,6 +231,10 @@ export function publicRouter() {
   // الزائر يسأل عن قطعة واحدة في مخطط واحد، فيأخذ رقمها وحدودها فقط: لا صورة مخطط ولا قائمة قطع.
   r.get('/lots', (req, res) => {
     const s = site();
+    if (!s.__lots) {
+      const body = `<section class="wrap narrow page"><h1>ابحث عن قطعة</h1><p class="lead">لا توجد مخططات متاحة للبحث على الموقع حالياً.</p><p>أرسل لنا رقم القطعة واسم المخطط وسنبحث لك.</p><p class="hero-actions"><a class="btn btn-primary" href="/request">أرسل طلبك</a><a class="btn btn-outline" href="/">العقارات المعروضة</a></p></section>`;
+      return res.send(layout(s, { title: 'ابحث عن قطعة', body, staff: isStaff(req.user) }));
+    }
     const body = `<section class="wrap lots-page">
   <h1>ابحث عن قطعة</h1>
   <p class="lead">اختر المقاطعة ثم المنطقة ثم المخطط، واكتب رقم القطعة لترى مكانها وحدودها على الخريطة.</p>
@@ -241,7 +245,7 @@ export function publicRouter() {
     <label class="f lot-f"><span>رقم القطعة</span><span class="lot-row"><input name="lot" aria-label="رقم القطعة" inputmode="text" dir="auto" maxlength="12" autocomplete="off" placeholder="مثل: 57"><button class="btn btn-primary" type="submit">اعرض</button></span></label>
   </form>
   <div class="form-status" id="lot-status" role="status" aria-live="polite"></div>
-  <div id="lot-map" class="map lot-map" aria-label="خريطة القطعة"></div>
+  <div id="lot-map" class="map lot-map" aria-label="خريطة القطعة" hidden></div>
   <div class="lot-card" id="lot-card" hidden></div>
   <p class="map-note">المعلومات مأخوذة من مخططات التجزئة للاسترشاد فقط، وليست وثيقة رسمية ولا تثبت الملكية. للتأكد راجع مصلحة العقارات.</p>
 </section>`;
@@ -276,11 +280,19 @@ export function publicRouter() {
     res.json({ plan: { id: plan.plan_id, label: plan.label, area: plan.area_name, verified: !!plan.verified, lots: plan.lots_count }, lot: String(req.query.lot).trim(), hits, listings, wa: normalizePhone(s.contact_whatsapp || s.contact_phone || '') || null });
   });
 
+  // من حدّث الصفحة بعد إرسال نموذج يصل إلى /submit بطلب GET
+  r.get('/submit', (req, res) => res.redirect(303, '/request'));
   r.get('/robots.txt', (req, res) => config.preview ? res.type('text/plain').send('User-agent: *\nDisallow: /\n') : res.type('text/plain').send(`User-agent: *\nDisallow: /admin/\nDisallow: /api/\nDisallow: /submit\nSitemap: ${baseUrl(req, site())}/sitemap.xml\n`));
   r.get('/sitemap.xml', (req, res) => {
     const s = site(); const b = baseUrl(req, s);
     const rows = publicReadDb().prepare('SELECT ref, updated_at FROM listings ORDER BY published_at DESC LIMIT 5000').all();
-    res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n<url><loc>${b}/</loc></url>\n<url><loc>${b}/request</loc></url>\n<url><loc>${b}/offer</loc></url>\n${rows.map((r) => `<url><loc>${b}/p/${encodeURIComponent(r.ref)}</loc><lastmod>${r.updated_at.slice(0, 10)}</lastmod></url>`).join('\n')}\n</urlset>`);
+    res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n<url><loc>${b}/</loc></url>\n<url><loc>${b}/request</loc></url>\n<url><loc>${b}/offer</loc></url>\n${s.__lots ? `<url><loc>${b}/lots</loc></url>\n` : ''}${rows.map((r) => `<url><loc>${b}/p/${encodeURIComponent(r.ref)}</loc><lastmod>${r.updated_at.slice(0, 10)}</lastmod></url>`).join('\n')}\n</urlset>`);
+  });
+  // صفحة «غير موجودة» بالعربية بدل رسالة Express الافتراضية
+  r.use((req, res, next) => {
+    if ((req.method !== 'GET' && req.method !== 'HEAD') || req.path.startsWith('/api/')) return next();
+    const s = site();
+    res.status(404).send(layout(s, { title: 'الصفحة غير موجودة', body: `<section class="wrap narrow page"><h1>الصفحة غير موجودة</h1><p>ربما تغيّر الرابط أو كُتب خطأ.</p><p class="hero-actions"><a class="btn btn-primary" href="/">العقارات المعروضة</a><a class="btn btn-outline" href="/request">أبحث عن عقار</a></p></section>`, staff: isStaff(req.user) }));
   });
   return r;
 }
