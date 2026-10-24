@@ -50,7 +50,7 @@ ${config.preview ? '<meta name="robots" content="noindex, nofollow">' : ''}
 ${head}
 </head>
 <body class="${bodyClass}">
-${config.preview ? '<div class="preview-bar" role="note">نسخة تجريبية للمعاينة — ليست الموقع الرسمي، والبيانات فيها للاختبار وقد تُمسح في أي وقت.</div>' : ''}
+${config.preview ? '<div class="preview-bar" role="note">نسخة تجريبية للمعاينة — ليست الموقع الرسمي، والعروض فيها للاختبار فقط.</div>' : ''}
 ${staff ? `<div class="staffbar"><span>أنت مسجّل كمدير. هذه هي الصفحة كما يراها الزوار.</span><a href="/admin/">مساحة العمل ←</a></div>` : ''}
 <header class="site-header">
   <div class="wrap header-row">

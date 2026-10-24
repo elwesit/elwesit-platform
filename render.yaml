@@ -1,15 +1,20 @@
-# نسخة معاينة مجانية على Render (خطة free): بلا قرص دائم، فالبيانات تُمسح عند كل إعادة تشغيل أو خمول.
+# نسخة المعاينة على Render كما فعّلها صاحب المشروع (2026-10-24): خطة starter مع قرص دائم 1GB في /var/data،
+# فتبقى البيانات والصور بعد إعادة التشغيل والنشر الجديد.
 # الأسرار (بريد وكلمة مرور المدير) تُدخل في لوحة Render عند الإنشاء، ولا تُكتب هنا.
 services:
   - type: web
     name: elwesit-preview
     runtime: node
-    plan: free
+    plan: starter
     branch: main
     buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /robots.txt
     autoDeploy: true
+    disk:
+      name: wasit-data
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - key: NODE_VERSION
         value: "22"
@@ -20,8 +25,12 @@ services:
       - key: SECURE_COOKIES
         value: "1"
       - key: WASIT_DATA_DIR
-        value: /tmp/wasit-data
+        value: /var/data/wasit
       - key: WASIT_ADMIN_EMAIL
         sync: false
       - key: WASIT_ADMIN_PASSWORD
+        sync: false
+      - key: WASIT_E2E_EMAIL
+        sync: false
+      - key: WASIT_E2E_PASSWORD
         sync: false

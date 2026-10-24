@@ -101,7 +101,7 @@ export function adminRouter() {
     res.json({ server_time: serverTime, full: !since, data });
   });
 
-  r.get('/settings', (req, res) => res.json({ settings: getSettings(), preview: config.preview, whatsapp_configured: whatsapp.isConfigured() }));
+  r.get('/settings', (req, res) => res.json({ settings: getSettings(), preview: config.preview, ephemeral: config.ephemeralData, whatsapp_configured: whatsapp.isConfigured() }));
   r.put('/settings', (req, res) => {
     const allowed = Object.keys(DEFAULT_SETTINGS);
     const up = db().prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at');

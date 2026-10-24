@@ -268,7 +268,7 @@ export async function syncNow() { await flush(); await pull(); }
 
 export async function loadSettings() {
   const r = await api('GET', '/settings').catch(() => null);
-  if (r?.ok) set({ settings: r.data.settings, waConfigured: r.data.whatsapp_configured, preview: !!r.data.preview });
+  if (r?.ok) set({ settings: r.data.settings, waConfigured: r.data.whatsapp_configured, preview: !!r.data.preview, ephemeral: !!r.data.ephemeral });
 }
 
 export async function saveSettings(patch) {

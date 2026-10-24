@@ -1,3 +1,4 @@
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -20,6 +21,8 @@ export const config = {
   baseUrl: (process.env.BASE_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/$/, ''),
   // نسخة تجريبية: شريط تنبيه ظاهر، ومنع الفهرسة، وتنبيه بأن البيانات قد تُمسح
   preview: process.env.WASIT_PREVIEW === '1',
+  // مجلد بيانات تحت /tmp يعني أنها تُمسح عند إعادة التشغيل (مثل خطة Render المجانية)
+  ephemeralData: dataDir.startsWith('/tmp/') || dataDir.startsWith(os.tmpdir() + path.sep),
   // خلف وكيل HTTPS (Caddy/Nginx) اجعلها 1 ليُفعّل Secure على الكعكات
   trustProxy: process.env.TRUST_PROXY === '1' || !!process.env.RENDER,
   secureCookies: process.env.SECURE_COOKIES ? process.env.SECURE_COOKIES === '1' : process.env.NODE_ENV === 'production',
