@@ -9,7 +9,7 @@ import { db, publicWriteDb, getSettings, now, audit } from './db.js';
 import { config } from './config.js';
 import { toMRU } from '../shared/money.js';
 import { TYPES, DEALS_PUBLIC } from '../shared/vocab.js';
-import { norm } from '../shared/text.js';
+import { norm, normLot } from '../shared/text.js';
 import { touchRow } from './entities.js';
 import { privatePath } from './media.js';
 
@@ -149,4 +149,31 @@ export async function refreshIfPublished(id, user) {
   if (!p || !p.published) return null;
   if (p.archived_at || publishProblems(p).length) return { unpublished: true, ...unpublishProperty(id, user, 'auto') };
   return publishProperty(id, user);
+}
+
+// ---------- البحث العام عن القطع ----------
+// المخطط المتاح للبحث العام تُنسخ أرقام قطعه ومواقعها وحدودها إلى public.db، ولا تُنسخ صورته أبداً.
+// أي تعديل على المخطط (أو إيقاف الإتاحة أو الحذف) يعيد النسخ أو يحذفه.
+export function syncPlanPublic(id) {
+  const p = db().prepare('SELECT * FROM plans WHERE id = ?').get(id);
+  const pub = publicWriteDb();
+  pub.transaction(() => {
+    pub.prepare('DELETE FROM plan_lots WHERE plan_id = ?').run(id);
+    pub.prepare('DELETE FROM plan_index WHERE plan_id = ?').run(id);
+    if (!p || p.archived_at || !p.public_search) return;
+    const lots = JSON.parse(p.lots || '[]');
+    const legend = JSON.parse(p.status_legend || '{}');
+    const area = p.area_id ? db().prepare('SELECT name FROM areas WHERE id = ? AND archived_at IS NULL').get(p.area_id) : null;
+    pub.prepare('INSERT INTO plan_index (plan_id, label, moughataa_code, area_name, verified, georef, lots_count, updated_at) VALUES (?,?,?,?,?,?,?,?)')
+      .run(id, p.lotissement || p.name || 'مخطط', p.moughataa_code || null, area?.name || '', p.place_verified ? 1 : 0, p.georef || '', lots.length, now());
+    const ins = pub.prepare('INSERT INTO plan_lots (plan_id, lot, lot_norm, lat, lng, poly, status_label) VALUES (?,?,?,?,?,?,?)');
+    for (const l of lots) {
+      if (!Number.isFinite(l[1]) || !Number.isFinite(l[2])) continue;
+      ins.run(id, String(l[0]), normLot(l[0]), l[1], l[2], Array.isArray(l[4]) ? JSON.stringify(l[4]) : null, legend[l[3]] || '');
+    }
+  })();
+}
+// اسم المنطقة منسوخ في الفهرس العام: تغييره يعيد نسخ مخططاتها
+export function syncAreaPlansPublic(areaId) {
+  for (const { id } of db().prepare('SELECT id FROM plans WHERE area_id = ? AND public_search = 1').all(areaId)) syncPlanPublic(id);
 }

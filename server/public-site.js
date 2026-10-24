@@ -12,6 +12,9 @@ import { TYPES, DEALS_PUBLIC } from '../shared/vocab.js';
 import { formatNumber } from '../shared/money.js';
 import { normalizePhone } from '../shared/phone.js';
 import { directionsLinks } from '../shared/geolink.js';
+import { lotPrecision, sidesText, planMatches } from '../shared/plans.js';
+import { measure } from '../shared/lotShapes.js';
+import { elevationAt } from './geo/elevation.js';
 
 const VERSION = Date.now().toString(36);
 const uploadPublic = multer({ storage: multer.memoryStorage(), limits: { fileSize: 12 * 1024 * 1024, files: 6, fields: 30, fieldSize: 8000 } });
@@ -21,6 +24,7 @@ function site() {
   for (const r of publicReadDb().prepare('SELECT key, value FROM site').all()) s[r.key] = JSON.parse(r.value);
   s.__v = VERSION;
   s.site_name ||= 'الوسيط العقاري';
+  s.__lots = !!publicReadDb().prepare('SELECT 1 FROM plan_index LIMIT 1').get();
   s.site_tagline ||= '';
   return s;
 }
@@ -96,7 +100,7 @@ export function publicRouter() {
   <h1>${e(s.site_tagline || 'عقارات في موريتانيا')}</h1>
   <p class="lead">${e(s.site_intro || '')}</p>
   ${searchForm(geo(), q)}
-  <div class="hero-actions"><a class="btn btn-outline" href="/request">لم تجد ما تريد؟ أرسل طلبك</a><a class="btn btn-outline" href="/offer">اعرض عقارك</a></div>
+  <div class="hero-actions">${s.__lots ? '<a class="btn btn-outline" href="/lots">ابحث عن قطعة برقمها</a>' : ''}<a class="btn btn-outline" href="/request">لم تجد ما تريد؟ أرسل طلبك</a><a class="btn btn-outline" href="/offer">اعرض عقارك</a></div>
 </div></section>
 <section class="wrap results" id="results" data-query="${e(qs)}">
   <div class="results-head">
@@ -222,6 +226,55 @@ export function publicRouter() {
   r.get('/privacy', (req, res) => { const s = site(); res.send(layout(s, { title: 'الخصوصية', body: privacyPage(s) })); });
   r.get('/terms', (req, res) => { const s = site(); res.send(layout(s, { title: 'الشروط', body: termsPage(s) })); });
   r.get('/content-rights', (req, res) => { const s = site(); res.send(layout(s, { title: 'حقوق المحتوى', body: contentPage(s) })); });
+
+  // ---------- البحث عن قطعة في مخططات التجزئة التي أتاحها المدير ----------
+  // الزائر يسأل عن قطعة واحدة في مخطط واحد، فيأخذ رقمها وحدودها فقط: لا صورة مخطط ولا قائمة قطع.
+  r.get('/lots', (req, res) => {
+    const s = site();
+    const body = `<section class="wrap lots-page">
+  <h1>ابحث عن قطعة</h1>
+  <p class="lead">اختر المقاطعة ثم المنطقة ثم المخطط، واكتب رقم القطعة لترى مكانها وحدودها على الخريطة.</p>
+  <form class="lot-form" id="lot-form" novalidate>
+    <label class="f"><span>المقاطعة</span><select name="m" aria-label="المقاطعة"><option value="">اختر المقاطعة</option></select></label>
+    <label class="f"><span>المنطقة أو الحي</span><select name="a" aria-label="المنطقة أو الحي" disabled><option value="">كل المناطق</option></select></label>
+    <label class="f"><span>المخطط</span><select name="plan" aria-label="المخطط" disabled><option value="">اختر المخطط</option></select></label>
+    <label class="f lot-f"><span>رقم القطعة</span><span class="lot-row"><input name="lot" aria-label="رقم القطعة" inputmode="text" dir="auto" maxlength="12" autocomplete="off" placeholder="مثل: 57"><button class="btn btn-primary" type="submit">اعرض</button></span></label>
+  </form>
+  <div class="form-status" id="lot-status" role="status" aria-live="polite"></div>
+  <div id="lot-map" class="map lot-map" aria-label="خريطة القطعة"></div>
+  <div class="lot-card" id="lot-card" hidden></div>
+  <p class="map-note">المعلومات مأخوذة من مخططات التجزئة للاسترشاد فقط، وليست وثيقة رسمية ولا تثبت الملكية. للتأكد راجع مصلحة العقارات.</p>
+</section>`;
+    res.send(layout(s, { title: 'ابحث عن قطعة', body, description: 'ابحث عن قطعة أرضية برقمها في مخططات التجزئة واعرف مكانها وأضلاعها ومساحتها.', canonical: baseUrl(req, s) + '/lots', staff: isStaff(req.user), head: mapHead(s) + `<script src="/static/public-lots.js?v=${s.__v}" defer></script>` }));
+  });
+  r.get('/api/public/lots/plans', (req, res) => {
+    const names = Object.fromEntries((geo().moughataas || []).map((m) => [m.code, m.name_ar]));
+    const plans = publicReadDb().prepare('SELECT plan_id, label, moughataa_code, area_name, verified, lots_count FROM plan_index ORDER BY label').all()
+      .map((p) => ({ id: p.plan_id, label: p.label, m: p.moughataa_code || '', m_name: names[p.moughataa_code] || 'مقاطعة غير محددة', area: p.area_name, verified: !!p.verified, lots: p.lots_count }));
+    res.json({ plans });
+  });
+  r.get('/api/public/lots', (req, res) => {
+    if (!rateLimit('lots:' + req.ip, 120, 10 * 60000)) return res.status(429).json({ error: 'busy', message: 'بحثت كثيراً خلال وقت قصير. حاول بعد قليل.' });
+    const plan = publicReadDb().prepare('SELECT * FROM plan_index WHERE plan_id = ?').get(String(req.query.plan || ''));
+    const n = normLot(String(req.query.lot || '').slice(0, 12));
+    if (!plan) return res.status(404).json({ error: 'no_plan', message: 'هذا المخطط غير متاح للبحث.' });
+    if (!n) return res.status(400).json({ error: 'no_lot', message: 'اكتب رقم القطعة.' });
+    const rows = publicReadDb().prepare('SELECT * FROM plan_lots WHERE plan_id = ? AND lot_norm = ? LIMIT 10').all(plan.plan_id, n);
+    const hits = rows.map((r) => {
+      const flat = safeJson(r.poly, null);
+      const poly = Array.isArray(flat) && flat.length >= 6 ? Array.from({ length: flat.length / 2 }, (_, i) => [flat[2 * i], flat[2 * i + 1]]) : null;
+      const m = poly ? measure(poly) : null;
+      const shape = poly ? { poly, sides: m.sides.map((x) => Math.round(x * 10) / 10), area: Math.round(m.area) } : null;
+      // الارتفاع: الوسيط بين نقاط القطعة (النموذج يشمل المباني)
+      const el = [[r.lat, r.lng], ...(poly || [])].map(([a, b]) => elevationAt(a, b)).filter((x) => x != null).sort((x, y) => x - y);
+      return { lot: r.lot, lat: r.lat, lng: r.lng, shape, sides_text: shape ? sidesText(shape.sides) : '', status: r.status_label, elevation: el.length ? Math.round(el[Math.floor(el.length / 2)] * 2) / 2 : null, precision: lotPrecision({ plan: { georef: plan.georef }, shape }) };
+    });
+    // العروض المنشورة على هذه القطعة (إن أظهر المدير رقم قطعتها)
+    const listings = hits.length ? publicReadDb().prepare("SELECT ref, title, lot_number, plan FROM listings WHERE lot_number != '' AND plan != ''").all()
+      .filter((l) => normLot(l.lot_number) === n && planMatches({ lotissement: plan.label }, l.plan)).map((l) => ({ ref: l.ref, title: l.title, url: `/p/${encodeURIComponent(l.ref)}` })) : [];
+    const s = site();
+    res.json({ plan: { id: plan.plan_id, label: plan.label, area: plan.area_name, verified: !!plan.verified, lots: plan.lots_count }, lot: String(req.query.lot).trim(), hits, listings, wa: normalizePhone(s.contact_whatsapp || s.contact_phone || '') || null });
+  });
 
   r.get('/robots.txt', (req, res) => config.preview ? res.type('text/plain').send('User-agent: *\nDisallow: /\n') : res.type('text/plain').send(`User-agent: *\nDisallow: /admin/\nDisallow: /api/\nDisallow: /submit\nSitemap: ${baseUrl(req, site())}/sitemap.xml\n`));
   r.get('/sitemap.xml', (req, res) => {

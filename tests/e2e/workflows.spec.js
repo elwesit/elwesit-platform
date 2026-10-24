@@ -595,6 +595,55 @@ test('إضافة مخطط PDF من الهاتف: الممسوح يُضبط بن�
   const meta = await sharp(await (await page.request.get('/api/admin/files/' + snap.id)).body()).metadata();
   expect([meta.width, meta.height]).toEqual([1200, 900]);
 
+  // البحث العام: المخطط غير متاح للزوار حتى يُفعَّل، ثم يرى الزائر القطعة وحدها بحدودها دون صورة المخطط
+  const anon = await page.context().browser().newContext({ ...ANON, ...(test.info().project.name === 'mobile' ? { viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true } : {}) });
+  const v = await anon.newPage();
+  const pubPlans = async () => (await (await v.request.get('/api/public/lots/plans')).json()).plans;
+  expect((await pubPlans()).some((p) => p.label === `المنارة ${tag}`)).toBe(false);
+  await page.goto('/admin/#/settings?tab=plans');
+  await page.locator('.plan-row', { hasText: `المنارة ${tag}` }).getByRole('button', { name: 'تعديل' }).click();
+  await page.locator('.sheet').getByLabel('متاح للبحث العام في الموقع').check();
+  await page.locator('.sheet').getByRole('button', { name: 'حفظ' }).click();
+  await expect(page.locator('.plan-row', { hasText: `المنارة ${tag}` })).toContainText('متاح للبحث في الموقع');
+  await waitSaved(page);
+  const pp = (await pubPlans()).find((p) => p.label === `المنارة ${tag}`);
+  expect(pp).toMatchObject({ m: 'TVZ', area: `حي ${tag}`, verified: true, lots: 12 });
+  const fileReqs = [];
+  v.on('request', (r) => { if (/\/api\/admin\/|\/files\//.test(r.url())) fileReqs.push(r.url()); });
+  await v.goto('/lots');
+  const lf = v.locator('#lot-form');
+  await lf.getByLabel('المقاطعة', { exact: true }).selectOption('TVZ');
+  await lf.getByLabel('المنطقة أو الحي', { exact: true }).selectOption(`حي ${tag}`);
+  await lf.getByLabel('المخطط', { exact: true }).selectOption(pp.id);
+  await lf.getByLabel('رقم القطعة').fill('9104');
+  await lf.getByRole('button', { name: 'اعرض' }).click();
+  const lc = v.locator('#lot-card');
+  await expect(lc).toContainText(`قطعة 9104 · المنارة ${tag}`);
+  await expect(lc.locator('.tag')).toHaveText('من المخطط');
+  await expect(lc).toContainText(/المساحة [\d,]+ م²/);
+  await expect(lc).toContainText('الأضلاع');
+  await expect(v.locator('.lot-side')).toHaveCount(4);
+  expect((await v.locator('path.leaflet-interactive').boundingBox()).width).toBeGreaterThan(40); // الحدود مرسومة فعلاً
+  await expect(v.locator('img.leaflet-image-layer')).toHaveCount(0); // لا صورة مخطط
+  expect(fileReqs).toEqual([]);
+  await expect(v).toHaveURL(/\/lots\?plan=.+&lot=9104/);
+  // رقم غير موجود
+  await lf.getByLabel('رقم القطعة').fill('9999');
+  await lf.getByRole('button', { name: 'اعرض' }).click();
+  await expect(v.locator('#lot-status')).toContainText('القطعة 9999 غير موجودة');
+  // الخادم يعطي القطعة المطلوبة وحدها
+  const one = await (await v.request.get(`/api/public/lots?plan=${pp.id}&lot=9105`)).json();
+  expect(one.hits.length).toBe(1); expect(one.hits[0].lot).toBe('9105');
+  expect(JSON.stringify(one)).not.toContain('9106');
+  // إيقاف الإتاحة يحذفه من الموقع
+  await page.locator('.plan-row', { hasText: `المنارة ${tag}` }).getByRole('button', { name: 'تعديل' }).click();
+  await page.locator('.sheet').getByLabel('متاح للبحث العام في الموقع').uncheck();
+  await page.locator('.sheet').getByRole('button', { name: 'حفظ' }).click();
+  await waitSaved(page);
+  expect((await pubPlans()).some((p) => p.id === pp.id)).toBe(false);
+  expect((await v.request.get(`/api/public/lots?plan=${pp.id}&lot=9105`)).status()).toBe(404);
+  await anon.close();
+
   // إعادة إضافة الملف نفسه تُحدّث المخطط ولا تكرره
   await page.goto('/admin/#/settings?tab=plans');
   await input.setInputFiles({ name: `Lotissement_${tag}`, mimeType: 'application/octet-stream', buffer: makeGeoPdf({ first: 9101 }) });

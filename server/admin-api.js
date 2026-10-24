@@ -5,7 +5,7 @@ import { config } from './config.js';
 import { ENTITIES, createRow, updateRow, getRow, syncSince, HttpError, parseRow, touchRow } from './entities.js';
 import { elevationAt, ELEV_SOURCE } from './geo/elevation.js';
 import { requireStaff, attemptLogin, createSession, setSessionCookie, clearSessionCookie, destroySession, destroyAllSessions, recoverWithCode, isStaff, verifyPassword, hashPassword, passwordProblems, rateLimit } from './auth.js';
-import { publishProperty, unpublishProperty, refreshIfPublished, syncPublicSettings, publishProblems } from './publish.js';
+import { publishProperty, unpublishProperty, refreshIfPublished, syncPublicSettings, publishProblems, syncPlanPublic, syncAreaPlansPublic } from './publish.js';
 import { storeUpload, sendPrivateFile } from './media.js';
 import { buildWorkbook } from './export.js';
 import { createBackup } from './backup.js';
@@ -250,6 +250,7 @@ export function adminRouter() {
     const ent = req.params.entity;
     if (!ENTITIES[ent]) throw new HttpError(404, 'غير موجود');
     const out = createRow(ent, req.body || {}, req.user);
+    if (ent === 'plans' && !out.existed) syncPlanPublic(out.row.id);
     res.status(out.existed ? 200 : 201).json({ row: out.row, existed: out.existed });
   }));
   r.patch('/e/:entity/:id', wrap(async (req, res) => {
@@ -258,6 +259,8 @@ export function adminRouter() {
     const { base_version, patch, force } = req.body || {};
     const out = updateRow(ent, req.params.id, patch || {}, base_version, req.user, { force: !!force });
     let publish = null;
+    if (ent === 'plans' && out.changed.length) syncPlanPublic(req.params.id);
+    if (ent === 'areas' && out.changed.length) syncAreaPlansPublic(req.params.id);
     if (ent === 'properties' && out.changed.length) publish = await refreshIfPublished(req.params.id, req.user);
     if (ent === 'files' && out.changed.length) {
       const f = db().prepare('SELECT owner_type, owner_id FROM files WHERE id = ?').get(req.params.id);

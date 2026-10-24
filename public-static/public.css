@@ -22,7 +22,7 @@ html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; font-family: var(--font); background: var(--bg); color: var(--ink); line-height: 1.65; font-size: 16px; }
 a { color: var(--brand); }
 img { max-width: 100%; display: block; }
-svg { width: 1.15em; height: 1.15em; fill: currentColor; flex: none; }
+svg:not(.leaflet-zoom-animated) { width: 1.15em; height: 1.15em; fill: currentColor; flex: none; }
 .wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
 .narrow { max-width: 680px; }
 h1, h2, h3 { line-height: 1.35; margin: 0 0 .5em; }
@@ -213,3 +213,21 @@ fieldset.inline label { display: flex; align-items: center; gap: 6px; min-height
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 
 .preview-bar{background:#7a4a00;color:#fff;text-align:center;padding:.4rem 1rem;font-size:.9rem}
+/* ابحث عن قطعة */
+.lots-page { padding-block: 16px 24px; }
+.lot-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: end; margin: 12px 0; }
+.lot-form .f { margin: 0; min-width: 0; }
+.lot-form select, .lot-form input { width: 100%; min-width: 0; }
+.lot-form .lot-row { display: flex; gap: 6px; }
+.lot-form .lot-row input { flex: 1; }
+@media (max-width: 720px) { .lot-form { grid-template-columns: 1fr 1fr; } .lot-form .lot-f { grid-column: 1 / -1; } }
+.lot-map { height: 50vh; min-height: 320px; margin-top: 10px; scroll-margin-top: 80px; }
+.lot-card { border: 1px solid var(--line); border-inline-start: 4px solid #7a4ab8; border-radius: 12px; padding: 10px 14px; margin-top: 10px; background: var(--surface); }
+.lot-card h2 { font-size: 1.1rem; margin: 4px 0; }
+.lot-facts { list-style: none; padding: 0; margin: 6px 0; display: grid; gap: 2px; }
+.lot-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+.lot-card .tag { font-size: .78rem; border-radius: 999px; padding: 1px 9px; font-weight: normal; }
+.tag.prec-plan { background: #efe7f8; color: #4a2a7a; }
+.tag.prec-label, .tag.prec-approx { background: #fbf0d6; color: #7a5a00; }
+.lot-side span { display: inline-block; transform: translate(-50%, -50%); background: rgba(255,255,255,.94); border: 1px solid #7a4ab8; color: #4a2a7a; border-radius: 6px; padding: 0 5px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.lot-side { background: none; border: none; }
