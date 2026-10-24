@@ -73,3 +73,12 @@ test('مخططات التجزئة: قراءة الحزمة والبحث عن ا�
   assert.equal(named.length, 1);
   assert.equal(named[0].status_label, 'غير ممنوحة');
 });
+
+test('ملف واحد بعدة مخططات', async () => {
+  const { splitPlanFile, parsePlanPackage } = await import('../../shared/plans.js');
+  const one = { format: 'wasit-plan/1', lots: [['1', 18, -16]] };
+  assert.equal(splitPlanFile(JSON.stringify(one)).length, 1);
+  const many = splitPlanFile(JSON.stringify({ plans: [one, one, one] }));
+  assert.equal(many.length, 3);
+  assert.equal(parsePlanPackage(many[0]).row.lots.length, 1);
+});
