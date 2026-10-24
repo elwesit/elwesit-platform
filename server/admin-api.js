@@ -3,6 +3,7 @@ import multer from 'multer';
 import { db, now, uid, getSettings, audit } from './db.js';
 import { config } from './config.js';
 import { ENTITIES, createRow, updateRow, getRow, syncSince, HttpError, parseRow, touchRow } from './entities.js';
+import { elevationAt, ELEV_SOURCE } from './geo/elevation.js';
 import { requireStaff, attemptLogin, createSession, setSessionCookie, clearSessionCookie, destroySession, destroyAllSessions, recoverWithCode, isStaff, verifyPassword, hashPassword, passwordProblems, rateLimit } from './auth.js';
 import { publishProperty, unpublishProperty, refreshIfPublished, syncPublicSettings, publishProblems } from './publish.js';
 import { storeUpload, sendPrivateFile } from './media.js';
@@ -117,6 +118,11 @@ export function adminRouter() {
     res.json(computeToday(loadStore(), { staleDays: s.stale_days || 30 }));
   });
 
+  // الارتفاع التقريبي لنقاط (pts=lat,lng;lat,lng…) — للقطع في مخططات نواكشوط
+  r.get('/elevation', (req, res) => {
+    const pts = String(req.query.pts || '').split(';').slice(0, 200).map((p) => p.split(',').map(Number)).filter((p) => p.length === 2 && p.every(Number.isFinite));
+    res.json({ elevations: pts.map(([la, ln]) => { const e = elevationAt(la, ln); return e == null ? null : Math.round(e * 10) / 10; }), source: ELEV_SOURCE });
+  });
   r.get('/search', (req, res) => res.json({ results: searchStore(loadStore(), req.query.q, { includeArchived: req.query.archived === '1' }) }));
 
   r.get('/duplicates/person', (req, res) => res.json({ results: personDuplicates(loadStore(), { name: req.query.name, phone: req.query.phone, excludeId: req.query.exclude }) }));

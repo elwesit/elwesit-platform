@@ -146,6 +146,7 @@ function GlobalSearch({ autoFocus, onPick }) {
   const open = (r) => {
     const map = { person: 'people', property: 'properties', request: 'requests', deal: 'deals', inbox: 'inbox' };
     if (r.type === 'activity') go(r.ref.person_id ? `people/${r.ref.person_id}` : r.ref.property_id ? `properties/${r.ref.property_id}` : r.ref.request_id ? `requests/${r.ref.request_id}` : 'today');
+    else if (r.type === 'planlot') go('properties/map?q=' + encodeURIComponent(q));
     else if (r.type === 'geometry') go('search?q=' + encodeURIComponent(q));
     else go(`${map[r.type]}/${r.id}`);
     setQ(''); onPick?.();
@@ -167,6 +168,6 @@ function SearchScreen({ q }) {
     <h1>نتائج «{q}»</h1>
     <label className="inline-check"><input type="checkbox" checked={arch} onChange={(e) => setArch(e.target.checked)} /> تضمين الأرشيف</label>
     {!results.length && <p className="muted">لا نتائج.</p>}
-    <ul className="list">{results.map((r) => <li key={r.type + r.id}><a className="list-item" href={r.type === 'activity' ? href(r.ref.person_id ? `people/${r.ref.person_id}` : `properties/${r.ref.property_id}`) : r.type === 'geometry' ? undefined : href(`${map[r.type]}/${r.id}`)}><KindTag kind={r.type} small /><div><b>{r.title}</b>{r.archived && <span className="tag">مؤرشف</span>}<small className="muted block">{r.sub} · {r.why}</small></div></a></li>)}</ul>
+    <ul className="list">{results.map((r) => <li key={r.type + r.id}><a className="list-item" href={r.type === 'activity' ? href(r.ref.person_id ? `people/${r.ref.person_id}` : `properties/${r.ref.property_id}`) : r.type === 'geometry' ? undefined : r.type === 'planlot' ? href('properties/map?q=' + encodeURIComponent(q)) : href(`${map[r.type]}/${r.id}`)}><KindTag kind={r.type} small /><div><b>{r.title}</b>{r.archived && <span className="tag">مؤرشف</span>}<small className="muted block">{r.sub} · {r.why}</small></div></a></li>)}</ul>
   </div>;
 }

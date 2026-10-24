@@ -496,7 +496,7 @@ test('إضافة مخطط PDF من الهاتف: الممسوح يُضبط بن�
   // ملف من واتساب بلا امتداد ولا نوع: يُعرف من محتواه
   await input.setInputFiles({ name: `Lotissement_${tag}`, mimeType: 'application/octet-stream', buffer: makeGeoPdf({ first: 9101 }) });
   const row = page.locator('.plan-row', { hasText: `Lotissement ${tag}` });
-  await expect(row).toContainText('12 قطعة', { timeout: 30000 });
+  await expect(row).toContainText('12 قطعة، 12 بحدودها', { timeout: 30000 });
   await expect(row).toContainText('إحداثيات من الملف نفسه');
   await waitSaved(page);
   const t = await api(page).get('/sync');
@@ -513,9 +513,50 @@ test('إضافة مخطط PDF من الهاتف: الممسوح يُضبط بن�
   await page.getByRole('button', { name: 'اعرض' }).click();
   await expect(page.locator('.plan-hits')).toContainText(`قطعة 9106 · Lotissement ${tag}`);
   await expect(page.locator('img.plan-img')).toHaveCount(1);
+  // حدود القطعة: المساحة والأضلاع على الخريطة والارتفاع التقريبي
+  const info = page.locator('.lot-info');
+  await expect(info).toContainText(/المساحة [\d,]+ م² \(\d+(\.\d)? × \d+(\.\d)? م\)/);
+  await expect(info).toContainText(/الارتفاع التقريبي عن سطح البحر: -?[\d.]+ م/);
+  await expect(page.locator('.lot-side')).toHaveCount(4);
+  await expect(page.locator('path.leaflet-interactive[stroke="#7a4ab8"]')).toHaveCount(1);
 
+  // البحث بالرقم مع اسم المنطقة أو المخطط
+  await page.getByLabel('رقم القطعة').fill('قطعة ٩١٠٦ تفرغ زينة');
+  await page.getByRole('button', { name: 'اعرض' }).click();
+  await expect(page.locator('.lot-info')).toContainText(`قطعة 9106 · Lotissement ${tag}`);
+  await page.getByLabel('رقم القطعة').fill(`9107 Lotissement ${tag}`);
+  await page.getByRole('button', { name: 'اعرض' }).click();
+  await expect(page.locator('.lot-info')).toContainText(`قطعة 9107 · Lotissement ${tag}`);
+  await page.getByLabel('رقم القطعة').fill('9108 لكصر');
+  await page.getByRole('button', { name: 'اعرض' }).click();
+  await expect(page.locator('.form-msg')).toContainText('لم نجد مخططاً أو منطقة باسم «لكصر»');
+  await expect(page.locator('.lot-info')).toContainText('قطعة 9108');
+  // البحث الموحد يجد القطعة في المخطط ويفتحها على الخريطة
+  if (await page.locator('.top-search').isVisible()) await page.locator('.top-search').click(); // على الهاتف يُفتح البحث من زر
+  const gs = page.getByRole('searchbox', { name: 'بحث موحد' });
+  await gs.fill('9109 تفرغ زينة');
+  await page.getByText(`قطعة 9109 · Lotissement ${tag}`).first().click();
+  await expect(page).toHaveURL(/properties\/map\?q=/);
+  await expect(page.locator('.lot-info')).toContainText(`قطعة 9109 · Lotissement ${tag}`);
+
+  // اسم عربي للمخطط يُبحث به
   await page.goto('/admin/#/settings?tab=plans');
-  await row.getByRole('button', { name: 'حذف' }).click();
+  await page.locator('.plan-row', { hasText: `Lotissement ${tag}` }).getByRole('button', { name: 'الاسم' }).click();
+  await page.getByLabel('الاسم كما تبحث به').fill(`المنارة ${tag}`);
+  await page.locator('.sheet').getByRole('button', { name: 'حفظ' }).click();
+  await page.goto('/admin/#/properties/map');
+  await page.getByLabel('رقم القطعة').fill(`9110 منارة ${tag}`);
+  await page.getByRole('button', { name: 'اعرض' }).click();
+  await expect(page.locator('.lot-info')).toContainText(`قطعة 9110 · المنارة ${tag}`);
+
+  // إعادة إضافة الملف نفسه تُحدّث المخطط ولا تكرره
+  await page.goto('/admin/#/settings?tab=plans');
+  await input.setInputFiles({ name: `Lotissement_${tag}`, mimeType: 'application/octet-stream', buffer: makeGeoPdf({ first: 9101 }) });
+  await expect(page.getByRole('status')).toContainText('حُدّث', { timeout: 30000 });
+  const renamed = page.locator('.plan-row', { hasText: `المنارة ${tag}` });
+  await expect(renamed).toHaveCount(1); // الاسم الذي اختاره المستخدم يبقى بعد التحديث
+
+  await renamed.getByRole('button', { name: 'حذف' }).click();
   await page.locator('.sheet, [role=dialog]').last().getByRole('button', { name: 'حذف' }).click();
-  await expect(row).toHaveCount(0);
+  await expect(renamed).toHaveCount(0);
 });

@@ -3,7 +3,7 @@ import { useTable, useRow, create, update, archive, call, api, storeSnapshot, us
 import { fieldsFor, cleanupFor } from '@shared/typeFields.js';
 import { Btn, Field, Input, NumInput, Select, Seg, Chips, Toggle, TextArea, Sheet, Section, Empty, KindTag, Pending, Icon, LinkBtn, useToast, Confirm } from '../ui.jsx';
 import { Missing, PersonPicker, GeoFields, PriceFields, NextStep, ContactActions, Timeline, Photos, InfoRow, SplitLayout, useSettings, loadLeaflet, tileLayer, pinIcon, zonesLayer, zoneNames, attachPlans } from '../components.jsx';
-import { findPlanLots, planLabel, hitTag, hitPlanCount } from '@shared/plans.js';
+import { findPlanLots, planLabel, hitTag, hitPlanCount, shapeText, searchPlanLots, parseLotQuery } from '@shared/plans.js';
 import { zoneAt, lotLabel, NKC_ZONES } from '@shared/nouakchottZones.js';
 import MapPicker from '../MapPicker.jsx';
 import { TYPES, DEALS, AVAILABILITY, FEATURES, SENT_RESPONSE } from '@shared/vocab.js';
@@ -20,7 +20,7 @@ export default function Properties({ route, wide }) {
   const id = route.parts[1];
   const sub = route.parts[2];
   if (id === 'new') return <PropertyForm onDone={(nid) => go('properties/' + nid)} />;
-  if (id === 'map') return <PlanMap />;
+  if (id === 'map') return <PlanMap key={route.query.q || ''} initialQ={route.query.q} />;
   if (id && sub === 'edit') return <EditWrapper id={id} />;
   return <SplitLayout wide={wide} hasDetail={!!id} list={<PropertyList route={route} selected={id} />} detail={id && <PropertyDetail id={id} tab={route.query.tab} />} />;
 }
@@ -363,14 +363,14 @@ function ShareSheet({ p, onClose }) {
 }
 
 // ---------- مخطط نواكشوط: العروض على الخريطة مع المقاطعات ورقم القطعة ----------
-function PlanMap() {
+function PlanMap({ initialQ }) {
   const ref = React.useRef();
   const mapRef = React.useRef();
   const settings = useSettings();
   const props = useTable('properties');
   const moughataas = useTable('moughataas');
   const plans = useTable('plans');
-  const [q, setQ] = useState('');
+  const [q, setQ] = useState(initialQ || '');
   const [msg, setMsg] = useState(null);
   const [hits, setHits] = useState([]);
   const [opacity, setOpacity] = useState(0.85);
@@ -406,37 +406,87 @@ function PlanMap() {
     return () => map?.remove();
   }, [placed.length, moughataas.length, plans.map((p) => p.id + p.visible + (p.archived_at || '')).join()]); // eslint-disable-line
   useEffect(() => { mapRef.current?.pl?.setOpacity(opacity); }, [opacity]);
+  const [lotInfo, setLotInfo] = useState(null);
   const showLot = (h) => {
     const m = mapRef.current; if (!m) return;
     m.found.clearLayers();
     m.L.marker([h.lat, h.lng], { icon: pinIcon(m.L, '#7a4ab8') }).addTo(m.found)
       .bindTooltip(`قطعة ${h.lot} · ${planLabel(h.plan)}${h.status_label ? ' · ' + h.status_label : ''}`, { permanent: true, direction: 'top', offset: [0, -28], className: 'lot-label' });
-    m.map.setView([h.lat, h.lng], 18);
+    if (h.shape) {
+      // حدود القطعة وطول كل ضلع على منتصفه
+      m.L.polygon(h.shape.poly, { color: '#7a4ab8', weight: 2, fillOpacity: 0.15 }).addTo(m.found);
+      h.shape.poly.forEach((p, i) => {
+        const q = h.shape.poly[(i + 1) % h.shape.poly.length];
+        if (h.shape.sides[i] < 2) return;
+        m.L.marker([(p[0] + q[0]) / 2, (p[1] + q[1]) / 2], { icon: m.L.divIcon({ className: 'lot-side', html: `<span>${(Math.round(h.shape.sides[i] * 10) / 10).toLocaleString('ar-u-nu-latn')} م</span>`, iconSize: null }), interactive: false }).addTo(m.found);
+      });
+      m.map.fitBounds(m.L.latLngBounds(h.shape.poly).pad(0.6), { maxZoom: 20 });
+    } else m.map.setView([h.lat, h.lng], 18);
+    setLotInfo({ h, elev: null });
+    // صندوق المعلومات يُزيح الخريطة: نعيد الضبط بعد ظهوره
+    // وعلى الهاتف يمتد إطار الخريطة تحت حافة الشاشة: نضع القطعة في الجزء الظاهر منها
+    setTimeout(() => {
+      m.map.invalidateSize();
+      const r = m.map.getContainer().getBoundingClientRect();
+      const hidden = Math.max(0, Math.min(r.height - 120, r.bottom - window.innerHeight + 80));
+      const b = h.shape ? m.L.latLngBounds(h.shape.poly).pad(0.6) : m.L.latLng(h.lat, h.lng).toBounds(60);
+      m.map.fitBounds(b, { maxZoom: h.shape ? 20 : 18, paddingTopLeft: [10, 30], paddingBottomRight: [10, hidden + 10] });
+    }, 60);
+    const pts = [[h.lat, h.lng], ...(h.shape?.poly || [])];
+    api('GET', '/elevation?pts=' + pts.map((p) => p.map((x) => x.toFixed(6)).join(',')).join(';')).then((r) => {
+      const e = r.ok ? r.data.elevations.filter((x) => x != null) : [];
+      // الوسيط: النموذج يشمل المباني، فقيمة نقطة واحدة قد تكون سطح بيت
+      const med = [...e].sort((x, y) => x - y)[Math.floor(e.length / 2)];
+      if (e.length) setLotInfo((cur) => (cur?.h === h ? { h, elev: med } : cur));
+    }).catch(() => {});
   };
   const find = (e) => {
-    e.preventDefault();
-    const lot = normLot(q); const nq = norm(q);
+    e?.preventDefault();
+    const nq = norm(q);
+    // «57 المنارة» أو «F9 561»: الرقم وحده، والكلمات الباقية اسم المخطط أو المنطقة
+    const pq = parseLotQuery(q);
+    const lot = normLot(pq.lot || (/\d/.test(q) ? q : ''));
     if (!lot && !nq) return;
-    // القطعة في مخططات التجزئة المستوردة
-    const ph = findPlanLots(plans, q);
+    const res = searchPlanLots(plans, q, { moughataas });
+    const ph = res.hits;
     setHits(ph);
-    if (ph.length) showLot(ph[0]);
-    const found = live.filter((p) => (lot && p.lot_norm === lot) || norm(p.ref) === nq);
+    if (ph.length) showLot(ph[0]); else { setLotInfo(null); mapRef.current?.found.clearLayers(); }
+    const notes = [];
+    if (res.unmatched) notes.push(`لم نجد مخططاً أو منطقة باسم «${res.rest}» فيها هذه القطعة؛ هذه كل القطع بالرقم ${res.lot}.`);
+    const nameOk = (p) => !pq.rest || [p.plan, p.sector, p.area_text, moughataas.find((m) => m.code === p.moughataa_code)?.name_ar].some((x) => x && norm(x).includes(norm(pq.rest)));
+    let found = live.filter((p) => (lot && p.lot_norm === lot && nameOk(p)) || norm(p.ref) === nq);
+    if (!found.length && lot && pq.rest) found = live.filter((p) => p.lot_norm === lot);
     const onMap = found.filter((p) => p.lat != null);
-    if (!found.length) { setMsg(ph.length ? null : 'لا يوجد عرض ولا قطعة في المخططات بهذا الرقم.'); return; }
-    if (!onMap.length) { setMsg(`وُجد ${found.length} عرض بهذا الرقم لكن بلا موقع على الخريطة.`); return; }
-    const m = mapRef.current; if (!m) return;
-    if (ph.length) { setMsg(`وأيضاً ${onMap.length} عرض مسجل بهذا الرقم: ${onMap.map((p) => lotLabel(p) || p.ref).join('، ')}`); return; }
-    m.map.setView([onMap[0].lat, onMap[0].lng], 17);
-    setMsg(onMap.length > 1 ? `${onMap.length} عروض بهذا الرقم (في مخططات/قطاعات مختلفة): ${onMap.map((p) => lotLabel(p) || p.ref).join('، ')}` : lotLabel(onMap[0]) || onMap[0].ref);
+    const m = mapRef.current;
+    if (!found.length) notes.push(ph.length ? '' : pq.lot ? `لا توجد قطعة بالرقم ${pq.lot} في المخططات المضافة ولا في العروض.` : 'اكتب رقم القطعة، ويمكن إضافة اسم المخطط أو المنطقة، مثل: 57 المنارة.');
+    else if (!onMap.length) notes.push(`وُجد ${found.length} عرض بهذا الرقم لكن بلا موقع على الخريطة.`);
+    else if (ph.length) notes.push(`وأيضاً ${onMap.length} عرض مسجل بهذا الرقم: ${onMap.map((p) => lotLabel(p) || p.ref).join('، ')}`);
+    else if (m) {
+      m.map.setView([onMap[0].lat, onMap[0].lng], 17);
+      notes.push(onMap.length > 1 ? `${onMap.length} عروض بهذا الرقم (في مخططات/قطاعات مختلفة): ${onMap.map((p) => lotLabel(p) || p.ref).join('، ')}` : lotLabel(onMap[0]) || onMap[0].ref);
+    }
+    setMsg(notes.filter(Boolean).join(' ') || null);
   };
+  // فتح الشاشة من البحث الموحد بقطعة محددة
+  const ran = React.useRef(false);
+  useEffect(() => {
+    if (ran.current || !initialQ) return;
+    const t = setInterval(() => { if (mapRef.current) { clearInterval(t); ran.current = true; find(); } }, 100);
+    return () => clearInterval(t);
+  }, [initialQ, plans.length]); // eslint-disable-line
   return <div className="page">
     <div className="page-head"><h1>مخطط نواكشوط</h1><Btn onClick={() => go('properties')}>القائمة</Btn></div>
     <form className="inline-form map-tools" onSubmit={find}>
-      <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="ابحث برقم القطعة أو المرجع" aria-label="رقم القطعة" dir="auto" />
+      <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="رقم القطعة، ويمكن إضافة المخطط أو المنطقة: 57 المنارة" aria-label="رقم القطعة" dir="auto" />
       <Btn small type="submit">اعرض</Btn>
     </form>
-    {hits.length > 0 && <div className="plan-hits">{hits.length > 1 && <small className="muted">{hitPlanCount(hits) > 1 ? `الرقم موجود في ${hitPlanCount(hits)} مخططات:` : `الرقم مكرر ${hits.length} مرات في المخطط:`}</small>}{hits.map((h, i) => <button type="button" key={i} className="chip" onClick={() => showLot(h)}>قطعة {h.lot} · {planLabel(h.plan)}{hitTag(hits, i)}{h.status_label ? ` (${h.status_label})` : ''}</button>)}</div>}
+    {hits.length > 0 && <div className="plan-hits">{hits.length > 1 && <small className="muted">{hitPlanCount(hits) > 1 ? `الرقم موجود في ${hitPlanCount(hits)} مخططات:` : `الرقم مكرر ${hits.length} مرات في المخطط:`}</small>}{hits.map((h, i) => <button type="button" key={i} className="chip" onClick={() => showLot(h)}>قطعة {h.lot} · {planLabel(h.plan)}{hitTag(hits, i)}{h.shape ? ` · ${h.shape.area.toLocaleString('ar-u-nu-latn')} م²` : ''}{h.status_label ? ` (${h.status_label})` : ''}</button>)}</div>}
+    {lotInfo && <div className="lot-info">
+      <b>قطعة {lotInfo.h.lot} · {planLabel(lotInfo.h.plan)}</b>
+      {lotInfo.h.shape ? <span>المساحة {shapeText(lotInfo.h.shape)}</span> : <span className="muted">حدود القطعة غير متوفرة في هذا المخطط</span>}
+      {lotInfo.elev != null && <span>الارتفاع التقريبي عن سطح البحر: {(Math.round(lotInfo.elev * 2) / 2).toLocaleString('ar-u-nu-latn')} م</span>}
+      <small className="muted">الأضلاع والمساحة محسوبة من خطوط المخطط، والارتفاع من نموذج Copernicus (دقته بضعة أمتار): للاسترشاد وليست وثيقة رسمية.</small>
+    </div>}
     {msg && <p className="form-msg">{msg}</p>}
     <div ref={ref} className="map map-plan" />
     {plans.some((p) => !p.archived_at && p.image_file_id) && <label className="inline-check opacity-ctl">شفافية المخططات <input type="range" min="0.2" max="1" step="0.05" value={opacity} onChange={(e) => setOpacity(+e.target.value)} /></label>}
@@ -483,7 +533,7 @@ export function PropertyForm({ initial, onDone }) {
   const usePlanLot = (h) => {
     const mc = v.moughataa_code || h.plan.moughataa_code || zoneAt(h.lat, h.lng);
     const wc = mc ? table('moughataas').find((m) => m.code === mc)?.wilaya_code : v.wilaya_code;
-    set({ lat: h.lat, lng: h.lng, location_method: 'plan', location_precision: 'exact', plan: v.plan || planLabel(h.plan), moughataa_code: mc || null, wilaya_code: wc || v.wilaya_code || null });
+    set({ lat: h.lat, lng: h.lng, location_method: 'plan', location_precision: 'exact', plan: v.plan || planLabel(h.plan), moughataa_code: mc || null, wilaya_code: wc || v.wilaya_code || null, ...(h.shape && v.area_m2 == null ? { area_m2: h.shape.area } : {}) });
   };
   const extraCount = ['title', 'landmark', 'location_desc', 'frontage', 'bathrooms', 'floors', 'price_raw', 'price_terms', 'description'].filter((k) => v[k] != null && v[k] !== '').length + (v.features?.length ? 1 : 0) + (v.price_negotiable ? 1 : 0);
   return <div className="page form-page">
@@ -504,7 +554,7 @@ export function PropertyForm({ initial, onDone }) {
       </div>}
       {planHits.length > 0 && <div className="plan-hits">
         {planHits.some(onPlanLot)
-          ? <small className="ok-text">✓ الموقع على القطعة {v.lot_number} من مخطط «{planLabel(planHits.find(onPlanLot).plan)}»{planHits.find(onPlanLot).status_label ? ` · ${planHits.find(onPlanLot).status_label}` : ''}</small>
+          ? <small className="ok-text">✓ الموقع على القطعة {v.lot_number} من مخطط «{planLabel(planHits.find(onPlanLot).plan)}»{planHits.find(onPlanLot).status_label ? ` · ${planHits.find(onPlanLot).status_label}` : ''}{planHits.find(onPlanLot).shape ? ` · ${shapeText(planHits.find(onPlanLot).shape)}` : ''}</small>
           : <>
             <small className="muted">القطعة {v.lot_number} موجودة في {planHits.length > 1 ? `${hitPlanCount(planHits) > 1 ? `${hitPlanCount(planHits)} مخططات` : 'أكثر من موضع'}، اختر الصحيح:` : 'مخطط مستورد:'}</small>
             {planHits.map((h, i) => <button type="button" key={i} className="chip" onClick={() => usePlanLot(h)}>ضع الموقع على القطعة · {planLabel(h.plan)}{hitTag(planHits, i)}{h.status_label ? ` (${h.status_label})` : ''}</button>)}

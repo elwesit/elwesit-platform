@@ -1,6 +1,7 @@
 // بحث موحد: الاسم، الهاتف، المنطقة، رقم القطعة، المرجع، والكلمات في الملاحظات.
 import { TYPES, DEALS_PUBLIC } from './vocab.js';
 import { norm, normTight, normLot, toLatinDigits } from './text.js';
+import { searchPlanLots, parseLotQuery, planLabel } from './plans.js';
 
 const live = (r) => !r.archived_at;
 
@@ -11,6 +12,10 @@ export function searchStore(store, q, { includeArchived = false, limit = 60 } = 
   const words = nq.split(' ').filter(Boolean);
   const digits = toLatinDigits(query).replace(/\D/g, '');
   const lot = normLot(query);
+  // «57 المنارة»: رقم القطعة مع اسم المخطط أو المنطقة
+  const pq = parseLotQuery(query);
+  const lotPart = pq.lot && pq.rest ? normLot(pq.lot) : null;
+  const restWords = norm(pq.rest).split(' ').filter(Boolean);
   const ok = (r) => includeArchived || live(r);
   const geoName = (code) => store.moughataas?.find((m) => m.code === code)?.name_ar || store.wilayas?.find((w) => w.code === code)?.name_ar || '';
   const areaName = (id) => store.areas?.find((a) => a.id === id)?.name || '';
@@ -31,11 +36,17 @@ export function searchStore(store, q, { includeArchived = false, limit = 60 } = 
   }
   for (const p of (store.properties || []).filter(ok)) {
     const lotHit = lot.length >= 1 && p.lot_norm && (p.lot_norm === lot || (lot.length >= 3 && p.lot_norm.includes(lot)));
+    const lotNameHit = !!lotPart && p.lot_norm === lotPart && (() => { const hay = norm([p.plan, p.sector, p.area_text, areaName(p.area_id), geoName(p.moughataa_code), p.landmark].filter(Boolean).join(' ')); return restWords.every((w) => hay.includes(w) || hay.replace(/\s+/g, '').includes(w)); })();
     const refHit = normTight(p.ref) === normTight(query);
     const srcNotes = (store.property_sources || []).filter((s) => s.property_id === p.id && live(s)).map((s) => s.notes + ' ' + s.conditions + ' ' + s.commission_terms).join(' ');
-    if (lotHit || refHit || textHit(p.ref, p.title, p.description, p.area_text, areaName(p.area_id), p.landmark, p.location_desc, p.plan, p.sector, p.internal_notes, geoName(p.moughataa_code), geoName(p.wilaya_code), srcNotes)) {
-      out.push({ type: 'property', id: p.id, title: `${p.ref} ${p.title || [TYPES[p.type], p.deal && DEALS_PUBLIC[p.deal]].filter(Boolean).join(' ')}`.trim(), sub: [areaName(p.area_id) || p.area_text, geoName(p.moughataa_code), p.lot_number ? 'قطعة ' + p.lot_number : ''].filter(Boolean).join(' · '), why: refHit ? 'المرجع' : lotHit ? 'رقم القطعة' : 'النص', archived: !!p.archived_at, rank: refHit || lotHit ? 0 : 2 });
+    if (lotHit || lotNameHit || refHit || textHit(p.ref, p.title, p.description, p.area_text, areaName(p.area_id), p.landmark, p.location_desc, p.plan, p.sector, p.internal_notes, geoName(p.moughataa_code), geoName(p.wilaya_code), srcNotes)) {
+      out.push({ type: 'property', id: p.id, title: `${p.ref} ${p.title || [TYPES[p.type], p.deal && DEALS_PUBLIC[p.deal]].filter(Boolean).join(' ')}`.trim(), sub: [areaName(p.area_id) || p.area_text, geoName(p.moughataa_code), p.lot_number ? 'قطعة ' + p.lot_number : ''].filter(Boolean).join(' · '), why: refHit ? 'المرجع' : lotHit || lotNameHit ? 'رقم القطعة' : 'النص', archived: !!p.archived_at, rank: refHit || lotHit || lotNameHit ? 0 : 2 });
     }
+  }
+  // القطع في مخططات التجزئة المضافة
+  if (pq.lot && store.plans?.length) {
+    const r = searchPlanLots(store.plans, query, { moughataas: store.moughataas || [] });
+    if (!r.unmatched) r.hits.slice(0, 8).forEach((h, i) => out.push({ type: 'planlot', id: `${h.plan.id}:${h.lot}:${i}`, title: `قطعة ${h.lot} · ${planLabel(h.plan)}`, sub: [geoName(h.plan.moughataa_code), h.shape ? `${h.shape.area} م²` : '', h.status_label].filter(Boolean).join(' · '), why: 'مخطط التجزئة', rank: 1 }));
   }
   for (const g of (store.geometries || []).filter(ok)) {
     if (lot && g.lot_norm === lot && !g.property_id) out.push({ type: 'geometry', id: g.id, title: `قطعة ${g.lot_number} (${g.plan || 'بدون مخطط'})`, sub: `حدود ${g.method === 'imported' ? 'مستوردة من ' + g.source_name : 'مرسومة يدوياً'}`, why: 'رقم القطعة', rank: 1 });

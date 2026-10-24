@@ -387,3 +387,5 @@ textarea { resize: vertical; }
 .align-pt span { display: flex; width: 26px; height: 26px; border-radius: 50%; color: #fff; font-weight: 700; align-items: center; justify-content: center; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
 .map-align { height: 58vh; }
 .align-hint { font-weight: 600; }
+.lot-side span { background: rgba(255,255,255,.9); color: #4a2a7a; font-size: 11px; font-weight: 700; padding: 1px 4px; border-radius: 4px; white-space: nowrap; transform: translate(-50%, -50%); display: inline-block; border: 1px solid #c9b6e6; }
+.lot-info { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; margin-bottom: 8px; border: 1px solid var(--line); border-inline-start: 4px solid #7a4ab8; border-radius: 10px; background: var(--surface); }
