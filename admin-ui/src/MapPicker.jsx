@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Sheet, Btn, Field, Input, Seg, useToast } from './ui.jsx';
-import { loadLeaflet, tileLayer, pinIcon, useSettings } from './components.jsx';
+import { loadLeaflet, tileLayer, pinIcon, useSettings, zonesLayer, zoneNames } from './components.jsx';
+import { zoneAt } from '@shared/nouakchottZones.js';
 import { parseLocation } from '@shared/geolink.js';
 import { api, getState } from './data.js';
 import { table } from './data.js';
@@ -35,6 +36,7 @@ export default function MapPicker({ value, onSave, onClose }) {
       map = L.map(el.current).setView(center(), pos ? 17 : 13);
       tileLayer(L, settings).addTo(map);
       map.attributionControl.setPrefix(false);
+      zonesLayer(L, { names: zoneNames(table('moughataas')), highlight: value.moughataa_code }).addTo(map);
       mapRef.current = { map, L };
       if (pos) markerRef.current = L.marker([pos.lat, pos.lng], { icon: pinIcon(L), draggable: true }).addTo(map).on('dragend', (e) => { const p = e.target.getLatLng(); setPos({ lat: +p.lat.toFixed(6), lng: +p.lng.toFixed(6) }); setMethod('pin'); });
       map.on('click', (e) => { place(e.latlng.lat, e.latlng.lng, 'pin', false); });
@@ -52,6 +54,13 @@ export default function MapPicker({ value, onSave, onClose }) {
     else markerRef.current = m.L.marker([p.lat, p.lng], { icon: pinIcon(m.L), draggable: true }).addTo(m.map).on('dragend', (e) => { const q = e.target.getLatLng(); setPos({ lat: +q.lat.toFixed(6), lng: +q.lng.toFixed(6) }); setMethod('pin'); });
     if (fly) m.map.setView([p.lat, p.lng], 17);
   }
+
+  // المقاطعة التي تقع فيها العلامة حسب مخطط نواكشوط (تقريبي)
+  const zone = pos ? zoneAt(pos.lat, pos.lng) : null;
+  const zoneM = zone && table('moughataas').find((m) => m.code === zone);
+  const [useZone, setUseZone] = useState(true);
+  // المقاطعة تُملأ تلقائياً إن كانت فارغة؛ وإن اختلفت عن المختارة يقرر الوسيط
+  const zonePatch = () => (zoneM && zoneM.code !== value.moughataa_code && (!value.moughataa_code || useZone) ? { moughataa_code: zoneM.code, wilaya_code: zoneM.wilaya_code } : {});
 
   const useMine = () => {
     if (!navigator.geolocation) { setMsg('هذا الجهاز لا يدعم تحديد الموقع.'); return; }
@@ -80,7 +89,7 @@ export default function MapPicker({ value, onSave, onClose }) {
   return <Sheet title="الموقع على الخريطة" wide onClose={onClose} footer={<>
     {value.lat != null && <Btn kind="ghost" onClick={() => { onSave({ lat: null, lng: null, location_method: null, location_precision: 'none' }); onClose(); }}>إزالة الموقع</Btn>}
     <Btn onClick={onClose}>إلغاء</Btn>
-    <Btn kind="primary" disabled={!pos} onClick={() => { onSave({ lat: pos.lat, lng: pos.lng, location_method: method, location_precision: precision }); onClose(); toast('حُفظ الموقع'); }}>حفظ الموقع</Btn>
+    <Btn kind="primary" disabled={!pos} onClick={() => { const zp = zonePatch(); onSave({ lat: pos.lat, lng: pos.lng, location_method: method, location_precision: precision, ...zp }); onClose(); toast(zp.moughataa_code ? `حُفظ الموقع (مقاطعة ${zoneM.name_ar})` : 'حُفظ الموقع'); }}>حفظ الموقع</Btn>
   </>}>
     <div className="map-tools">
       <Btn small icon="location" onClick={useMine}>موقعي الحالي</Btn>
@@ -91,6 +100,9 @@ export default function MapPicker({ value, onSave, onClose }) {
     </div>
     <div ref={el} className="map map-pick">{loading && <p className="muted pad">جارٍ تحميل الخريطة…</p>}</div>
     <p className="hint">اضغط على الخريطة لوضع العلامة، واسحبها للتصحيح. {pos && <span dir="ltr">({pos.lat}, {pos.lng})</span>}</p>
+    {zoneM && (!value.moughataa_code || value.moughataa_code === zoneM.code
+      ? <p className="hint">العلامة في مقاطعة <b>{zoneM.name_ar}</b> حسب مخطط نواكشوط (حدود تقريبية).</p>
+      : <label className="inline-check warn-box"><input type="checkbox" checked={useZone} onChange={(e) => setUseZone(e.target.checked)} /> العلامة في <b>{zoneM.name_ar}</b> وليس {table('moughataas').find((m) => m.code === value.moughataa_code)?.name_ar}: غيّر المقاطعة إلى {zoneM.name_ar}</label>)}
     {msg && <p className="form-msg">{msg}</p>}
     <Field label="دقة هذا الموقع">
       <Seg value={precision} onChange={setPrecision} options={[['exact', 'دقيق (عند العقار)'], ['approximate', 'تقريبي (المنطقة)']]} />

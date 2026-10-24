@@ -2,7 +2,8 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { useTable, useRow, create, update, archive, call, api, storeSnapshot, useStore, getState, table } from '../data.js';
 import { fieldsFor, cleanupFor } from '@shared/typeFields.js';
 import { Btn, Field, Input, NumInput, Select, Seg, Chips, Toggle, TextArea, Sheet, Section, Empty, KindTag, Pending, Icon, LinkBtn, useToast, Confirm } from '../ui.jsx';
-import { Missing, PersonPicker, GeoFields, PriceFields, NextStep, ContactActions, Timeline, Photos, InfoRow, SplitLayout, useSettings, loadLeaflet, tileLayer, pinIcon } from '../components.jsx';
+import { Missing, PersonPicker, GeoFields, PriceFields, NextStep, ContactActions, Timeline, Photos, InfoRow, SplitLayout, useSettings, loadLeaflet, tileLayer, pinIcon, zonesLayer, zoneNames } from '../components.jsx';
+import { zoneAt, lotLabel, NKC_ZONES } from '@shared/nouakchottZones.js';
 import MapPicker from '../MapPicker.jsx';
 import { TYPES, DEALS, AVAILABILITY, FEATURES, SENT_RESPONSE } from '@shared/vocab.js';
 import { geoLabel, price, ago, propertyTitle, personLabel, shareText, fmtDate, waUrl, primaryPhone, toDateInput, fromDateInput, fillTemplate, locLabel } from '../fmt.js';
@@ -18,6 +19,7 @@ export default function Properties({ route, wide }) {
   const id = route.parts[1];
   const sub = route.parts[2];
   if (id === 'new') return <PropertyForm onDone={(nid) => go('properties/' + nid)} />;
+  if (id === 'map') return <PlanMap />;
   if (id && sub === 'edit') return <EditWrapper id={id} />;
   return <SplitLayout wide={wide} hasDetail={!!id} list={<PropertyList route={route} selected={id} />} detail={id && <PropertyDetail id={id} tab={route.query.tab} />} />;
 }
@@ -49,7 +51,7 @@ function PropertyList({ route, selected }) {
     }).sort((a, b) => b.created_at.localeCompare(a.created_at));
   }, [props, q, f, staleDays]);
   return <div className="page list-page">
-    <div className="page-head"><h1>العروض <small className="muted">({list.length})</small></h1><Btn kind="primary" icon="plus" onClick={() => go('properties/new')}>عرض جديد</Btn></div>
+    <div className="page-head"><h1>العروض <small className="muted">({list.length})</small></h1><span className="row-actions"><Btn icon="pin" onClick={() => go('properties/map')}>مخطط نواكشوط</Btn><Btn kind="primary" icon="plus" onClick={() => go('properties/new')}>عرض جديد</Btn></span></div>
     <div className="filters">
       <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="بحث: مرجع، حي، رقم قطعة، ملاحظة" aria-label="بحث في العروض" />
       <Select value={f.deal} onChange={(v) => setF({ ...f, deal: v })} placeholder="بيع وإيجار" options={Object.entries(DEALS)} />
@@ -169,10 +171,12 @@ function MiniMap({ p }) {
     loadLeaflet().then((L) => {
       map = L.map(ref.current, { scrollWheelZoom: false }).setView([p.lat, p.lng], 16);
       tileLayer(L, settings).addTo(map); map.attributionControl.setPrefix(false);
-      L.marker([p.lat, p.lng], { icon: pinIcon(L) }).addTo(map);
+      if (zoneAt(p.lat, p.lng)) zonesLayer(L, { names: zoneNames(table('moughataas')), highlight: p.moughataa_code }).addTo(map);
+      const mk = L.marker([p.lat, p.lng], { icon: pinIcon(L) }).addTo(map);
+      if (lotLabel(p)) mk.bindTooltip(lotLabel(p), { permanent: true, direction: 'top', offset: [0, -28], className: 'lot-label' });
     });
     return () => map?.remove();
-  }, [on, p.lat, p.lng]); // eslint-disable-line
+  }, [on, p.lat, p.lng, p.lot_number, p.sector, p.plan, p.moughataa_code]); // eslint-disable-line
   return <div ref={ref} className="map map-mini">{!on && <button className="btn btn-default" onClick={() => setOn(true)}>اعرض الخريطة</button>}</div>;
 }
 
@@ -356,6 +360,69 @@ function ShareSheet({ p, onClose }) {
   </Sheet>;
 }
 
+// ---------- مخطط نواكشوط: العروض على الخريطة مع المقاطعات ورقم القطعة ----------
+function PlanMap() {
+  const ref = React.useRef();
+  const mapRef = React.useRef();
+  const settings = useSettings();
+  const props = useTable('properties');
+  const moughataas = useTable('moughataas');
+  const [q, setQ] = useState('');
+  const [msg, setMsg] = useState(null);
+  const live = useMemo(() => props.filter((p) => !p.archived_at), [props]);
+  const placed = live.filter((p) => p.lat != null);
+  // العروض بلا موقع على الخريطة تُعدّ في مقاطعتها
+  const counts = useMemo(() => {
+    const c = {};
+    for (const p of live) { const z = NKC_ZONES[p.moughataa_code] ? p.moughataa_code : zoneAt(p.lat, p.lng); if (z) c[z] = (c[z] || 0) + 1; }
+    return c;
+  }, [live]);
+  const unplaced = live.filter((p) => p.lat == null && NKC_ZONES[p.moughataa_code]).length;
+  useEffect(() => {
+    let map; let layer;
+    loadLeaflet().then((L) => {
+      if (!ref.current) return;
+      map = L.map(ref.current).setView(settings.map_center || [18.0858, -15.9785], 12);
+      tileLayer(L, settings).addTo(map); map.attributionControl.setPrefix(false);
+      map.attributionControl.addAttribution('حدود المقاطعات تقريبية: geoBoundaries / OCHA');
+      zonesLayer(L, { names: zoneNames(moughataas), counts }).addTo(map);
+      layer = L.layerGroup().addTo(map);
+      const markers = {};
+      for (const p of placed) {
+        const mk = L.marker([p.lat, p.lng], { icon: pinIcon(L, p.availability === 'available' ? '#0e5a4c' : '#8a8f8d') }).addTo(layer).on('click', () => go('properties/' + p.id));
+        const lbl = p.lot_number ? `${p.lot_number}${p.sector ? ' / ' + p.sector : ''}` : p.ref;
+        mk.bindTooltip(lbl, { permanent: true, direction: 'top', offset: [0, -28], className: 'lot-label' });
+        markers[p.id] = mk;
+      }
+      mapRef.current = { map, markers };
+      setTimeout(() => map.invalidateSize(), 200);
+    });
+    return () => map?.remove();
+  }, [placed.length, moughataas.length]); // eslint-disable-line
+  const find = (e) => {
+    e.preventDefault();
+    const lot = normLot(q); const nq = norm(q);
+    if (!lot && !nq) return;
+    const hits = live.filter((p) => (lot && p.lot_norm === lot) || norm(p.ref) === nq);
+    const onMap = hits.filter((p) => p.lat != null);
+    if (!hits.length) { setMsg('لا يوجد عرض بهذا الرقم.'); return; }
+    if (!onMap.length) { setMsg(`وُجد ${hits.length} عرض بهذا الرقم لكن بلا موقع على الخريطة.`); return; }
+    const m = mapRef.current; if (!m) return;
+    m.map.setView([onMap[0].lat, onMap[0].lng], 17);
+    setMsg(onMap.length > 1 ? `${onMap.length} عروض بهذا الرقم (في مخططات/قطاعات مختلفة): ${onMap.map((p) => lotLabel(p) || p.ref).join('، ')}` : lotLabel(onMap[0]) || onMap[0].ref);
+  };
+  return <div className="page">
+    <div className="page-head"><h1>مخطط نواكشوط</h1><Btn onClick={() => go('properties')}>القائمة</Btn></div>
+    <form className="inline-form map-tools" onSubmit={find}>
+      <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="ابحث برقم القطعة أو المرجع" aria-label="رقم القطعة" dir="auto" />
+      <Btn small type="submit">اعرض</Btn>
+    </form>
+    {msg && <p className="form-msg">{msg}</p>}
+    <div ref={ref} className="map map-plan" />
+    <p className="hint">الأرقام بجانب أسماء المقاطعات = عدد العروض فيها. فوق كل علامة: رقم القطعة / القطاع. اضغط العلامة لفتح العرض.{unplaced > 0 && ` ${unplaced} عرض في نواكشوط بلا موقع على الخريطة.`} حدود المقاطعات تقريبية وليست حدوداً عقارية رسمية.</p>
+  </div>;
+}
+
 // ---------- نموذج الإضافة/التعديل ----------
 export function PropertyForm({ initial, onDone }) {
   const isNew = !initial;
@@ -387,7 +454,7 @@ export function PropertyForm({ initial, onDone }) {
     const uniq = (k) => [...new Set(ps.map((p) => p[k]).filter(Boolean))].slice(0, 30);
     return { plans: uniq('plan'), sectors: uniq('sector') };
   }, [v.moughataa_code]);
-  const extraCount = ['title', 'landmark', 'location_desc', 'plan', 'sector', 'frontage', 'bathrooms', 'floors', 'price_raw', 'price_terms', 'description'].filter((k) => v[k] != null && v[k] !== '').length + (v.features?.length ? 1 : 0) + (v.price_negotiable ? 1 : 0);
+  const extraCount = ['title', 'landmark', 'location_desc', 'frontage', 'bathrooms', 'floors', 'price_raw', 'price_terms', 'description'].filter((k) => v[k] != null && v[k] !== '').length + (v.features?.length ? 1 : 0) + (v.price_negotiable ? 1 : 0);
   return <div className="page form-page">
     <div className="page-head"><h1>{isNew ? 'عرض جديد' : `تعديل ${initial.ref}`}</h1></div>
     <p className="hint">لا شيء إلزامي للحفظ. سجّل ما تعرفه الآن وأكمل لاحقاً.</p>
@@ -397,12 +464,18 @@ export function PropertyForm({ initial, onDone }) {
     </fieldset>
     <fieldset className="fieldset"><legend>المكان</legend>
       <GeoFields value={v} onChange={set} />
+      {f.lot && <div className="grid3">
+        <Field label="المخطط"><Input value={v.plan} onChange={(x) => set({ plan: x })} list="dl-plans" /></Field>
+        <Field label="القطاع / الحرف"><Input value={v.sector} onChange={(x) => set({ sector: x })} list="dl-sectors" /></Field>
+        <Field label="رقم القطعة (النمرة)"><Input value={v.lot_number} onChange={(x) => set({ lot_number: x })} dir="auto" /></Field>
+        <datalist id="dl-plans">{known.plans.map((x) => <option key={x} value={x} />)}</datalist>
+        <datalist id="dl-sectors">{known.sectors.map((x) => <option key={x} value={x} />)}</datalist>
+      </div>}
       <div className="row-actions"><Btn icon="pin" onClick={() => setShowMap(true)}>{v.lat != null ? `على الخريطة: ${v.lat.toFixed(4)}, ${v.lng.toFixed(4)} (${v.location_precision === 'exact' ? 'دقيق' : 'تقريبي'})` : 'حدد على الخريطة (اختياري)'}</Btn></div>
     </fieldset>
     <fieldset className="fieldset"><legend>المواصفات</legend>
       <div className="grid2">
         <Field label="المساحة بالمتر المربع"><NumInput value={v.area_m2} onChange={(x) => set({ area_m2: x })} placeholder="مثلاً 300" /></Field>
-        {f.lot && <Field label="رقم القطعة (النمرة)"><Input value={v.lot_number} onChange={(x) => set({ lot_number: x })} dir="auto" /></Field>}
         {f.rooms && <Field label="عدد الغرف"><NumInput value={v.bedrooms} onChange={(x) => set({ bedrooms: x })} /></Field>}
       </div>
       {dups.length > 0 && <div className="warn-box"><b>قد يكون مسجلاً من قبل:</b><ul>{dups.map((d) => <li key={d.id}>{d.reason}: <a href={href('properties/' + d.id)} target="_blank" rel="noopener">{d.ref}</a></li>)}</ul><small>إن كان العقار نفسه من مصدر آخر، أضفه «مصدراً» للعرض الموجود.</small></div>}
@@ -414,12 +487,6 @@ export function PropertyForm({ initial, onDone }) {
     </fieldset>
     <details className="more-details">
       <summary>تفاصيل إضافية {extraCount ? <small>({extraCount} معبأة)</small> : <small>(اختيارية)</small>}</summary>
-      {f.lot && <div className="grid2">
-        <Field label="المخطط"><Input value={v.plan} onChange={(x) => set({ plan: x })} list="dl-plans" /></Field>
-        <Field label="القطاع"><Input value={v.sector} onChange={(x) => set({ sector: x })} list="dl-sectors" /></Field>
-        <datalist id="dl-plans">{known.plans.map((x) => <option key={x} value={x} />)}</datalist>
-        <datalist id="dl-sectors">{known.sectors.map((x) => <option key={x} value={x} />)}</datalist>
-      </div>}
       {(f.frontage || f.baths || f.floors) && <div className="grid3">
         {f.frontage && <Field label="الواجهة / الأبعاد"><Input value={v.frontage} onChange={(x) => set({ frontage: x })} placeholder="مثلاً 20×30" /></Field>}
         {f.baths && <Field label="الحمامات"><NumInput value={v.bathrooms} onChange={(x) => set({ bathrooms: x })} /></Field>}

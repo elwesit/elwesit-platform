@@ -375,3 +375,33 @@ test('حفظ عرض فارغ تماماً مسموح ويبقى مسودة', asy
   await expect(page.locator('.pub-status')).toContainText('مسودة');
   await expect(page.getByRole('link', { name: 'أكمل البيانات' })).toBeVisible();
 });
+
+test('مخطط نواكشوط: المخطط والقطاع والنمرة + العلامة تحدد المقاطعة ← يظهر في المخطط برقم القطعة', async ({ page }) => {
+  const lot = 'N' + String(100 + Math.floor(Math.random() * 800));
+  await login(page);
+  await page.goto('/admin/#/properties/new');
+  await page.getByRole('radio', { name: 'بيع' }).click();
+  await page.getByRole('button', { name: 'قطعة أرض' }).click();
+  await page.getByLabel('المخطط').fill('مخطط-اختبار');
+  await page.getByLabel('القطاع / الحرف').fill('C');
+  await page.getByLabel('رقم القطعة (النمرة)').fill(lot);
+  // بلا مقاطعة: العلامة داخل تفرغ زينة تملؤها
+  await page.getByRole('button', { name: 'حدد على الخريطة (اختياري)' }).click();
+  await page.getByPlaceholder('الصق رابط خرائط أو إحداثيات').fill('18.1046, -15.9885');
+  await page.getByRole('button', { name: 'قراءة' }).click();
+  await expect(page.locator('.sheet, [role=dialog]').first()).toContainText('العلامة في مقاطعة تفرغ زينة');
+  await page.getByRole('button', { name: 'حفظ الموقع' }).click();
+  await expect(page.getByLabel('المقاطعة')).toHaveValue('TVZ');
+  await expect(page.getByLabel('الولاية')).toHaveValue('NKW');
+  await page.getByRole('button', { name: 'حفظ العرض' }).click();
+  await expect(page).toHaveURL(/#\/properties\/[0-9a-f-]{36}/);
+  await waitSaved(page);
+  await page.goto('/admin/#/properties');
+  await page.getByRole('button', { name: 'مخطط نواكشوط' }).click();
+  await expect(page.getByRole('heading', { name: 'مخطط نواكشوط' })).toBeVisible();
+  await expect(page.locator('.zone-label', { hasText: 'تفرغ زينة' })).toBeVisible();
+  await expect(page.locator('.lot-label', { hasText: `${lot} / C` })).toHaveCount(1);
+  await page.getByLabel('رقم القطعة').fill(lot);
+  await page.getByRole('button', { name: 'اعرض' }).click();
+  await expect(page.locator('.form-msg')).toContainText(`قطعة ${lot} · قطاع C · مخطط مخطط-اختبار`);
+});
