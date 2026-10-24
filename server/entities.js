@@ -24,6 +24,7 @@ export const ENTITIES = {
     derive: (r) => ({ lot_norm: normLot(r.lot_number) }),
   },
   property_sources: { fields: { property_id: S, person_id: S, relation: S, channel: S, price_raw: S, price_amount: N, price_currency: S, price_basis: S, commission_terms: S, conditions: S, verified_at: T, notes: S } },
+  plans: { fields: { name: S, lotissement: S, moughataa_code: S, source_name: S, source_date: S, georef: S, south: N, west: N, north: N, east: N, image_file_id: S, transparent: B, visible: B, lots: J, status_legend: J, notes: S } },
   geometries: { fields: { property_id: S, plan: S, sector: S, lot_number: S, geojson: S, method: S, source_name: S, source_license: S, source_date: S, verified: B, area_m2: N }, derive: (r) => ({ lot_norm: normLot(r.lot_number) }) },
   requests: {
     ref: ['request', 'D'],
@@ -63,7 +64,7 @@ function coerce(type, v) {
 }
 
 // حقول نصية في المخطط ليست NULL؛ نحوّل null إلى '' لها
-const NOT_NULL_TEXT = new Set(['name', 'name_alt', 'source', 'notes', 'raw', 'label', 'title', 'description', 'area_text', 'landmark', 'location_desc', 'plan', 'sector', 'lot_number', 'frontage', 'price_raw', 'price_terms', 'internal_notes', 'pub_title', 'pub_description', 'channel', 'commission_terms', 'conditions', 'budget_raw', 'specs', 'flexibility', 'body', 'place', 'parties', 'outcome', 'lost_reason', 'agreed_raw', 'agreement', 'method', 'caption', 'message', 'phone', 'raw_text', 'source_name', 'source_license']);
+const NOT_NULL_TEXT = new Set(['name', 'name_alt', 'source', 'notes', 'raw', 'label', 'title', 'description', 'area_text', 'landmark', 'location_desc', 'plan', 'sector', 'lot_number', 'frontage', 'price_raw', 'price_terms', 'internal_notes', 'pub_title', 'pub_description', 'channel', 'commission_terms', 'conditions', 'budget_raw', 'specs', 'flexibility', 'body', 'place', 'parties', 'outcome', 'lost_reason', 'agreed_raw', 'agreement', 'method', 'caption', 'message', 'phone', 'raw_text', 'source_name', 'source_license', 'lotissement', 'georef']);
 
 function clean(entity, data, { partial }) {
   const def = ENTITIES[entity];

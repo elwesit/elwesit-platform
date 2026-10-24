@@ -376,3 +376,11 @@ textarea { resize: vertical; }
 .leaflet-tooltip.zone-label { background: transparent; border: 0; box-shadow: none; color: #0e5a4c; font-weight: 700; font-size: .8rem; text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
 .leaflet-tooltip.zone-label::before { display: none; }
 .leaflet-tooltip.lot-label { padding: 0 5px; font-size: .74rem; font-weight: 600; direction: rtl; }
+.leaflet-tooltip.plan-label { background: rgba(255,255,255,.85); border: 0; box-shadow: none; color: #5a2d91; font-weight: 700; font-size: .72rem; }
+.leaflet-tooltip.plan-label::before { display: none; }
+.plan-hits { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0 8px; }
+.plan-hits .chip { font-size: .85rem; }
+.ok-text { color: var(--ok, #1b7a3a); font-weight: 600; }
+.opacity-ctl { margin-top: 6px; gap: 8px; }
+.plan-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.plan-row > div { flex: 1; min-width: 180px; }

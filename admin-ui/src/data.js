@@ -38,7 +38,7 @@ const blobDel = (k) => idbOp('blobs', 'readwrite', (s) => s.delete(k));
 async function idbClear() { await idbOp('kv', 'readwrite', (s) => s.clear()); await idbOp('blobs', 'readwrite', (s) => s.clear()); }
 
 // ---------- الحالة ----------
-const TABLES = ['areas', 'people', 'phones', 'properties', 'property_sources', 'geometries', 'requests', 'sent_offers', 'activities', 'tasks', 'appointments', 'deals', 'commissions', 'commission_payments', 'files', 'inbox', 'captures', 'templates', 'dismissals', 'wilayas', 'moughataas'];
+const TABLES = ['areas', 'people', 'phones', 'properties', 'property_sources', 'geometries', 'plans', 'requests', 'sent_offers', 'activities', 'tasks', 'appointments', 'deals', 'commissions', 'commission_payments', 'files', 'inbox', 'captures', 'templates', 'dismissals', 'wilayas', 'moughataas'];
 
 let state = {
   ready: false, auth: 'unknown', user: null,

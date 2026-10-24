@@ -18,7 +18,7 @@ const DOC_TYPES = {
   'application/vnd.ms-excel': 'xls', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx', 'text/plain': 'txt',
 };
 const AUDIO_TYPES = { 'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/mpeg': 'mp3', 'audio/aac': 'aac', 'audio/wav': 'wav', 'video/webm': 'webm', 'video/mp4': 'm4a' };
-const OWNER_TYPES = new Set(['property', 'person', 'deal', 'request', 'capture', 'inbox', 'appointment']);
+const OWNER_TYPES = new Set(['property', 'person', 'deal', 'request', 'capture', 'inbox', 'appointment', 'plan']);
 
 function newKey(ext) {
   return `${new Date().getUTCFullYear()}/${crypto.randomUUID()}.${ext}`;

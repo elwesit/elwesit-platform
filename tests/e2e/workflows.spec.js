@@ -405,3 +405,52 @@ test('مخطط نواكشوط: المخطط والقطاع والنمرة + ال
   await page.getByRole('button', { name: 'اعرض' }).click();
   await expect(page.locator('.form-msg')).toContainText(`قطعة ${lot} · قطاع C · مخطط مخطط-اختبار`);
 });
+
+test('مخططات التجزئة: استيراد حزمة ← رقم القطعة يقترح موقعها ← يظهر في البحث بالمخطط', async ({ page }) => {
+  const tag = rnd().toUpperCase();
+  const lotissement = 'TEST PLAN ' + tag;
+  const png = await sharp({ create: { width: 64, height: 48, channels: 4, background: { r: 255, g: 140, b: 0, alpha: 0.6 } } }).png().toBuffer();
+  const pkg = { format: 'wasit-plan/1', name: 'مخطط اختبار ' + tag, lotissement, moughataa_code: 'TVZ', source_name: 'اختبار', source_date: '2024-04-04', georef: 'geopdf', transparent: true, bounds: [18.1444, -15.9952, 18.1473, -15.9666], status_legend: { libre: 'غير ممنوحة' }, lots: [['7001', 18.1458, -15.9800, 'libre'], ['7002', 18.1459, -15.9801]], image: 'data:image/png;base64,' + png.toString('base64') };
+  await login(page);
+  await page.goto('/admin/#/settings?tab=plans');
+  await page.locator('input[type=file][accept*=json]').setInputFiles({ name: 'test.wasitplan.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(pkg)) });
+  await expect(page.locator('.plan-row', { hasText: lotissement })).toContainText('2 قطعة');
+  await waitSaved(page);
+  // الصورة رُفعت وتُخدم للمدير فقط
+  const t = await api(page).get('/sync');
+  const row = t.data.plans.find((p) => p.lotissement === lotissement);
+  expect(row.image_file_id).toBeTruthy();
+  expect((await page.request.get('/api/admin/files/' + row.image_file_id)).status()).toBe(200);
+  const anon = await page.context().browser().newContext(ANON);
+  expect((await anon.request.get(page.url().replace(/\/admin.*/, '') + '/api/admin/files/' + row.image_file_id)).status()).not.toBe(200);
+  await anon.close();
+
+  // عرض جديد: رقم القطعة يقترح موقعها من المخطط
+  await page.goto('/admin/#/properties/new');
+  await page.getByRole('radio', { name: 'بيع' }).click();
+  await page.getByRole('button', { name: 'قطعة أرض' }).click();
+  await page.getByLabel('رقم القطعة (النمرة)').fill('7001');
+  await page.getByRole('button', { name: new RegExp(`ضع الموقع على القطعة · ${lotissement}`) }).click();
+  await expect(page.locator('.plan-hits')).toContainText('✓ الموقع على القطعة 7001');
+  await expect(page.locator('.plan-hits')).toContainText('غير ممنوحة');
+  await expect(page.getByLabel('المقاطعة')).toHaveValue('TVZ');
+  await expect(page.getByLabel('المخطط')).toHaveValue(lotissement);
+  await page.getByRole('button', { name: 'حفظ العرض' }).click();
+  await expect(page).toHaveURL(/#\/properties\/[0-9a-f-]{36}/);
+  await waitSaved(page);
+  await expect(page.locator('body')).toContainText('من مخطط التجزئة');
+
+  // البحث في شاشة المخطط
+  await page.goto('/admin/#/properties/map');
+  await page.getByLabel('رقم القطعة').fill('7002');
+  await page.getByRole('button', { name: 'اعرض' }).click();
+  await expect(page.locator('.plan-hits')).toContainText(`قطعة 7002 · ${lotissement}`);
+  await expect(page.locator('.lot-label', { hasText: `قطعة 7002 · ${lotissement}` })).toBeVisible();
+  await expect(page.locator('img.plan-img')).toHaveCount(1);
+
+  // الحذف يخفيه من البحث
+  await page.goto('/admin/#/settings?tab=plans');
+  await page.locator('.plan-row', { hasText: lotissement }).getByRole('button', { name: 'حذف' }).click();
+  await page.locator('.sheet, [role=dialog]').last().getByRole('button', { name: 'حذف' }).click();
+  await expect(page.locator('.plan-row', { hasText: lotissement })).toHaveCount(0);
+});
