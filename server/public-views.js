@@ -4,6 +4,7 @@ import { TYPES, DEALS_PUBLIC, FEATURES } from '../shared/vocab.js';
 import { formatAmountWords, formatNumber, PRICE_BASIS } from '../shared/money.js';
 import { displayPhone, normalizePhone } from '../shared/phone.js';
 import { config } from './config.js';
+import { listingFacts, inquiryMessage } from '../shared/inquiry.js';
 
 export function priceText(l) {
   if (l.price_hidden || l.price_amount == null) return { main: 'السعر عند التواصل', alt: '' };
@@ -96,7 +97,20 @@ ${body}
 </html>`;
 }
 
-export function card(l, base = '') {
+export function priceLine(l) {
+  if (l.price_hidden || l.price_amount == null) return '';
+  const p = priceText(l);
+  return p.alt ? `${p.main} ${p.alt}` : p.main;
+}
+
+// زر «استفسر عبر واتساب»: بدون جافاسكربت يفتح واتساب مباشرة، ومعها يطلب الاسم والرقم ويحفظ الاستفسار أولاً
+export function waAsk(l, { base = '', siteName, wa }, cls = '') {
+  if (!wa) return '';
+  const text = inquiryMessage(listingFacts(l, { url: `${base}/p/${encodeURIComponent(l.ref)}`, price: priceLine(l) }), '', siteName);
+  return `<a class="btn btn-wa wa-ask ${cls}" href="https://wa.me/${wa}?text=${encodeURIComponent(text)}" rel="noopener" data-wa="${e(wa)}" data-ref="${e(l.ref)}" data-title="${e(l.title)}" data-text="${e(text)}">${icon.wa}<span>استفسر عبر واتساب</span></a>`;
+}
+
+export function card(l, ctx = {}) {
   const photos = safeJson(l.photos);
   const cover = l.cover ? `/media/${encodeURIComponent(l.ref)}/${l.cover}-t.webp` : null;
   const p = priceText(l);
@@ -118,6 +132,7 @@ export function card(l, base = '') {
       <div class="card-price${l.price_hidden ? ' hidden-price' : ''}"><strong>${e(p.main)}</strong>${p.alt ? `<small>${e(p.alt)}</small>` : ''}</div>
     </div>
   </a>
+  ${ctx.wa ? `<div class="card-actions">${waAsk(l, ctx, 'btn-block btn-sm')}</div>` : ''}
 </article>`;
 }
 

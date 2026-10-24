@@ -4,11 +4,16 @@ import { db, publicReadDb, now, uid } from './db.js';
 import { storeUpload } from './media.js';
 import { normalizePhone, isPlausiblePhone } from '../shared/phone.js';
 import { TYPES } from '../shared/vocab.js';
+import { listingFacts } from '../shared/inquiry.js';
+import { priceLine } from './public-views.js';
+import { touchRow } from './entities.js';
+
+const REPEAT_WINDOW = 30 * 60 * 1000; // استفسار الرقم نفسه عن العقار نفسه خلال نصف ساعة = الاستفسار نفسه
 
 const KINDS = new Set(['search', 'offer', 'interest', 'contact']);
 const clip = (v, n) => String(v ?? '').trim().slice(0, n);
 
-export async function submitInbox(body, files = []) {
+export async function submitInbox(body, files = [], { baseUrl = '' } = {}) {
   const kind = String(body.kind || '');
   if (!KINDS.has(kind)) return { error: 'نوع الطلب غير معروف' };
   // حقل فخ للبرامج الآلية: نتظاهر بالنجاح ولا نحفظ شيئاً
@@ -20,10 +25,22 @@ export async function submitInbox(body, files = []) {
     const prev = db().prepare('SELECT id, created_at FROM inbox WHERE client_token = ?').get(token);
     if (prev) return { ok: true, duplicate: true, receipt: receiptOf(prev.id) }; // إعادة الإرسال نفسه لا تكرر الطلب
   }
-  let propertyRef = '';
+  let propertyRef = '', listing = null;
+  const viaWa = kind === 'interest' && body.via === 'whatsapp';
   if (kind === 'interest') {
     propertyRef = clip(body.property_ref, 20);
-    if (!publicReadDb().prepare('SELECT 1 FROM listings WHERE ref = ?').get(propertyRef)) return { error: 'العقار غير متوفر حالياً' };
+    const l = publicReadDb().prepare('SELECT * FROM listings WHERE ref = ?').get(propertyRef);
+    if (!l) return { error: 'العقار غير متوفر حالياً' };
+    // نسخة من بيانات العرض وقت الاستفسار، لرسالة الرد من لوحة الإدارة
+    listing = listingFacts(l, { url: baseUrl ? `${baseUrl}/p/${encodeURIComponent(l.ref)}` : '', price: priceLine(l) });
+    if (viaWa && !clip(body.name, 120)) return { error: 'اكتب اسمك' };
+    const prev = db().prepare("SELECT id, message FROM inbox WHERE kind = 'interest' AND phone_norm = ? AND property_ref = ? AND created_at > ? ORDER BY created_at DESC LIMIT 1")
+      .get(normalizePhone(phone), propertyRef, new Date(Date.now() - REPEAT_WINDOW).toISOString());
+    if (prev) {
+      const msg = clip(body.message, 1000);
+      if (msg && !prev.message.includes(msg)) touchRow('inbox', prev.id, { message: [prev.message, msg].filter(Boolean).join('\n') });
+      return { ok: true, duplicate: true, receipt: receiptOf(prev.id) };
+    }
   }
   if (kind === 'contact' && !clip(body.message, 10)) return { error: 'اكتب رسالتك' };
   const payload = {
@@ -35,6 +52,9 @@ export async function submitInbox(body, files = []) {
     area: clip(body.area, 20),
     relation: ['owner', 'broker', 'other'].includes(body.relation) ? body.relation : null,
     contact_pref: body.contact_pref === 'call' ? 'call' : 'whatsapp',
+    // via=whatsapp: الزبون فتح واتساب برسالة جاهزة؛ لا يعني ذلك أنه ضغط «إرسال»
+    ...(viaWa ? { via: 'whatsapp' } : {}),
+    ...(listing ? { listing } : {}),
   };
   const id = uid();
   const t = now();
