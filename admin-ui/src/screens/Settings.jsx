@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useStore, saveSettings, useTable, create, update, archive, api, logout, loadSettings, uploadFile, fileUrl, uuid } from '../data.js';
-import { parsePlanPackage, planLabel } from '@shared/plans.js';
+import { parsePlanPackage, splitPlanFile, planLabel } from '@shared/plans.js';
 import { Btn, Field, Input, NumInput, TextArea, Section, Seg, Select, useToast, Sheet, LinkBtn, Icon } from '../ui.jsx';
 import { href } from '../router.js';
 import { fmtDateTime } from '../fmt.js';
@@ -107,10 +107,15 @@ function Plans() {
   const importFiles = async (files) => {
     setBusy(true);
     let ok = 0;
+    const items = [];
     for (const file of files) {
+      try { for (const d of splitPlanFile(await file.text())) items.push({ file, d }); } catch (e) { toast(`${file.name}: ${e.message}`, 'err'); }
+    }
+    const seen = [...plans];
+    for (const { file, d } of items) {
       try {
-        const { row, image } = parsePlanPackage(await file.text());
-        const dup = plans.find((p) => p.name === row.name && p.lotissement === row.lotissement);
+        const { row, image } = parsePlanPackage(d);
+        const dup = seen.find((p) => p.name === row.name && p.lotissement === row.lotissement);
         if (dup) { toast(`«${planLabel(row)}» مستورد من قبل`, 'err'); continue; }
         const id = uuid();
         let image_file_id = null;
@@ -122,6 +127,7 @@ function Plans() {
           image_file_id = await uploadFile(new File([bytes], (row.lotissement || 'plan') + '.' + type.split('/')[1], { type }), { kind: 'document', owner_type: 'plan', owner_id: id });
         }
         create('plans', { ...row, id, image_file_id });
+        seen.push(row);
         ok++;
       } catch (e) { toast(`${file.name}: ${e.message}`, 'err'); }
     }
@@ -142,7 +148,7 @@ function Plans() {
       <Btn small kind="ghost" onClick={() => setDel(p)}>حذف</Btn>
     </div>)}
     <div className="row-actions">
-      <label className={`btn btn-default upload-btn${busy ? ' disabled' : ''}`}>{busy ? 'جارٍ الاستيراد…' : 'استيراد مخطط (.wasitplan.json)'}<input type="file" accept=".json,application/json" multiple hidden disabled={busy} onChange={(e) => { importFiles([...e.target.files]); e.target.value = ''; }} /></label>
+      <label className={`btn btn-default upload-btn${busy ? ' disabled' : ''}`}>{busy ? 'جارٍ الاستيراد…' : 'استيراد مخطط (.wasitplan.json)'}<input type="file" multiple hidden disabled={busy} onChange={(e) => { importFiles([...e.target.files]); e.target.value = ''; }} /></label>
     </div>
     {del && <Sheet title="حذف المخطط" onClose={() => setDel(null)} footer={<><Btn onClick={() => setDel(null)}>إلغاء</Btn><Btn kind="primary" onClick={() => { archive('plans', del.id); setDel(null); }}>حذف</Btn></>}>
       <p>حذف «{del.name || planLabel(del)}» من الخريطة والبحث؟ مواقع العروض التي وُضعت منه تبقى كما هي.</p>

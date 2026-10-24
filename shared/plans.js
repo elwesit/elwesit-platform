@@ -29,10 +29,18 @@ export function findPlanLots(plans, lot, { plan: planText, moughataa_code } = {}
 
 export function planLabel(p) { return p.lotissement || p.name || 'مخطط'; }
 
-// قراءة حزمة مخطط (ملف .wasitplan.json) والتحقق منها قبل الاستيراد
-export function parsePlanPackage(text) {
+// ملف واحد قد يحمل عدة مخططات (أسهل على الهاتف من تنزيل ملفات كثيرة)
+export function splitPlanFile(text) {
   let d;
   try { d = JSON.parse(text); } catch { throw new Error('الملف ليس حزمة مخطط صالحة.'); }
+  if (Array.isArray(d?.plans)) return d.plans;
+  return [d];
+}
+
+// قراءة حزمة مخطط (ملف .wasitplan.json) والتحقق منها قبل الاستيراد
+export function parsePlanPackage(text) {
+  let d = text;
+  if (typeof text === 'string') { try { d = JSON.parse(text); } catch { throw new Error('الملف ليس حزمة مخطط صالحة.'); } }
   if (d?.format !== PLAN_FORMAT) throw new Error('الملف ليس حزمة مخطط من الوسيط.');
   const b = d.bounds;
   const hasImage = typeof d.image === 'string' && d.image.startsWith('data:image/');

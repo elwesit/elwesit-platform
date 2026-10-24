@@ -413,7 +413,8 @@ test('مخططات التجزئة: استيراد حزمة ← رقم القطع
   const pkg = { format: 'wasit-plan/1', name: 'مخطط اختبار ' + tag, lotissement, moughataa_code: 'TVZ', source_name: 'اختبار', source_date: '2024-04-04', georef: 'geopdf', transparent: true, bounds: [18.1444, -15.9952, 18.1473, -15.9666], status_legend: { libre: 'غير ممنوحة' }, lots: [['7001', 18.1458, -15.9800, 'libre'], ['7002', 18.1459, -15.9801]], image: 'data:image/png;base64,' + png.toString('base64') };
   await login(page);
   await page.goto('/admin/#/settings?tab=plans');
-  await page.locator('input[type=file][accept*=json]').setInputFiles({ name: 'test.wasitplan.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(pkg)) });
+  await page.locator('.upload-btn input[type=file]').setInputFiles({ name: 'test.wasitplan.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ plans: [pkg, { ...pkg, name: 'مخطط ثان ' + tag, lotissement: 'OTHER ' + tag, image: undefined, lots: [['8001', 18.1, -16]] }] })) });
+  await expect(page.locator('.plan-row', { hasText: 'OTHER ' + tag })).toContainText('1 قطعة');
   await expect(page.locator('.plan-row', { hasText: lotissement })).toContainText('2 قطعة');
   await waitSaved(page);
   // الصورة رُفعت وتُخدم للمدير فقط
