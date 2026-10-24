@@ -462,8 +462,10 @@ test('إضافة مخطط PDF من الهاتف: الممسوح يُضبط بن�
   await login(page);
   await page.goto('/admin/#/settings?tab=plans');
   const input = page.locator('.upload-btn input[type=file]');
+  // بلا accept: بعض منتقيات الهاتف تخفي ملفات PDF عند تقييد النوع
+  await expect(input).not.toHaveAttribute('accept', /./);
   // ملف ممسوح بلا إحداثيات: يُضبط بنقطتين (على المخطط ثم على الخريطة)
-  await input.setInputFiles({ name: `scan-${tag}.pdf`, mimeType: 'application/pdf', buffer: makeGeoPdf({ geo: false }) });
+  await input.setInputFiles({ name: `scan-${tag}`, mimeType: 'application/octet-stream', buffer: makeGeoPdf({ geo: false }) });
   const sheet = page.getByRole('dialog', { name: new RegExp(`ضبط المخطط: scan-${tag}`) });
   await expect(sheet).toContainText('المس النقطة أ', { timeout: 20000 });
   const m = sheet.locator('.map-align');
@@ -491,13 +493,14 @@ test('إضافة مخطط PDF من الهاتف: الممسوح يُضبط بن�
   await page.locator('.sheet, [role=dialog]').last().getByRole('button', { name: 'حذف' }).click();
   await expect(scanRow).toHaveCount(0);
 
-  await input.setInputFiles({ name: `Lotissement_${tag}.pdf`, mimeType: 'application/pdf', buffer: makeGeoPdf({ first: 9101 }) });
+  // ملف من واتساب بلا امتداد ولا نوع: يُعرف من محتواه
+  await input.setInputFiles({ name: `Lotissement_${tag}`, mimeType: 'application/octet-stream', buffer: makeGeoPdf({ first: 9101 }) });
   const row = page.locator('.plan-row', { hasText: `Lotissement ${tag}` });
   await expect(row).toContainText('12 قطعة', { timeout: 30000 });
   await expect(row).toContainText('إحداثيات من الملف نفسه');
   await waitSaved(page);
   const t = await api(page).get('/sync');
-  const plan = t.data.plans.find((p) => p.source_name === `Lotissement_${tag}.pdf`);
+  const plan = t.data.plans.find((p) => p.source_name === `Lotissement_${tag}`);
   expect(plan.south).toBeCloseTo(18.11, 3); expect(plan.east).toBeCloseTo(-15.9753, 3);
   expect(plan.moughataa_code).toBe('TVZ');
   // القطعة 9101 مكتوبة في أعلى يسار الإطار: موقعها داخل الحدود في الربع الشمالي الغربي
