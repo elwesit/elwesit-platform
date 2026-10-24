@@ -1,6 +1,7 @@
 // مسارات عمل كاملة عبر المتصفح (Chromium). تُشغَّل بمقاس حاسوب ومقاس جوال (محاكاة Pixel 7).
 import { test, expect } from '@playwright/test';
 import sharp from 'sharp';
+import { makeGeoPdf } from '../fixtures-geopdf.js';
 
 const ADMIN = { email: process.env.E2E_EMAIL || 'admin@e2e.test', password: process.env.E2E_PASSWORD || 'E2e-pass-123456' };
 const rnd = () => Math.random().toString(36).slice(2, 7);
@@ -454,4 +455,40 @@ test('مخططات التجزئة: استيراد حزمة ← رقم القطع
   await page.locator('.plan-row', { hasText: lotissement }).getByRole('button', { name: 'حذف' }).click();
   await page.locator('.sheet, [role=dialog]').last().getByRole('button', { name: 'حذف' }).click();
   await expect(page.locator('.plan-row', { hasText: lotissement })).toHaveCount(0);
+});
+
+test('إضافة مخطط PDF بإحداثياته من الهاتف: يُضبط على الخريطة وتُستخرج أرقام قطعه', async ({ page }) => {
+  const tag = rnd();
+  await login(page);
+  await page.goto('/admin/#/settings?tab=plans');
+  const input = page.locator('.upload-btn input[type=file]');
+  // ملف بلا إحداثيات: رسالة واضحة ولا شيء يُضاف
+  await input.setInputFiles({ name: `scan-${tag}.pdf`, mimeType: 'application/pdf', buffer: makeGeoPdf({ geo: false }) });
+  await expect(page.getByRole('status')).toContainText('لا يحمل إحداثيات');
+  await expect(page.locator('.plan-row', { hasText: `scan-${tag}` })).toHaveCount(0);
+
+  await input.setInputFiles({ name: `Lotissement_${tag}.pdf`, mimeType: 'application/pdf', buffer: makeGeoPdf({ first: 9101 }) });
+  const row = page.locator('.plan-row', { hasText: `Lotissement ${tag}` });
+  await expect(row).toContainText('12 قطعة', { timeout: 30000 });
+  await expect(row).toContainText('إحداثيات من الملف نفسه');
+  await waitSaved(page);
+  const t = await api(page).get('/sync');
+  const plan = t.data.plans.find((p) => p.source_name === `Lotissement_${tag}.pdf`);
+  expect(plan.south).toBeCloseTo(18.11, 3); expect(plan.east).toBeCloseTo(-15.9753, 3);
+  expect(plan.moughataa_code).toBe('TVZ');
+  // القطعة 9101 مكتوبة في أعلى يسار الإطار: موقعها داخل الحدود في الربع الشمالي الغربي
+  const lot = plan.lots.find((l) => l[0] === '9101');
+  expect(lot[1]).toBeGreaterThan((plan.south + plan.north) / 2); expect(lot[2]).toBeLessThan((plan.west + plan.east) / 2);
+  expect((await page.request.get('/api/admin/files/' + plan.image_file_id)).status()).toBe(200);
+
+  await page.goto('/admin/#/properties/map');
+  await page.getByLabel('رقم القطعة').fill('9106');
+  await page.getByRole('button', { name: 'اعرض' }).click();
+  await expect(page.locator('.plan-hits')).toContainText(`قطعة 9106 · Lotissement ${tag}`);
+  await expect(page.locator('img.plan-img')).toHaveCount(1);
+
+  await page.goto('/admin/#/settings?tab=plans');
+  await row.getByRole('button', { name: 'حذف' }).click();
+  await page.locator('.sheet, [role=dialog]').last().getByRole('button', { name: 'حذف' }).click();
+  await expect(row).toHaveCount(0);
 });

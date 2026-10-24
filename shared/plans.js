@@ -57,3 +57,10 @@ export function parsePlanPackage(text) {
     image: hasImage ? d.image : null,
   };
 }
+
+// المخطط الواحد قد يجمع عدة تجزئات بترقيم متكرر (مثل NCE 1-2-3): نميّز المواضع المتكررة
+export function hitTag(hits, i) {
+  const same = hits.filter((h) => h.plan === hits[i].plan);
+  return same.length > 1 ? ` · موضع ${same.indexOf(hits[i]) + 1} من ${same.length}` : '';
+}
+export const hitPlanCount = (hits) => new Set(hits.map((h) => h.plan)).size;

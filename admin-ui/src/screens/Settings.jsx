@@ -109,17 +109,22 @@ function Plans() {
     let ok = 0;
     const items = [];
     for (const file of files) {
+      if (/\.pdf$/i.test(file.name) || file.type === 'application/pdf') { items.push({ file, pdf: true }); continue; }
       try { for (const d of splitPlanFile(await file.text())) items.push({ file, d }); } catch (e) { toast(`${file.name}: ${e.message}`, 'err'); }
     }
     const seen = [...plans];
-    for (const { file, d } of items) {
+    for (const { file, d, pdf } of items) {
       try {
-        const { row, image } = parsePlanPackage(d);
+        if (pdf && seen.some((p) => p.source_name === file.name)) { toast(`«${file.name}» مستورد من قبل`, 'err'); continue; }
+        const { row, image } = pdf
+          ? await (await import('../geopdfImport.js')).readGeoPdf(file, (step) => setBusy(`${file.name}: ${step}…`))
+          : parsePlanPackage(d);
         const dup = seen.find((p) => p.name === row.name && p.lotissement === row.lotissement);
         if (dup) { toast(`«${planLabel(row)}» مستورد من قبل`, 'err'); continue; }
         const id = uuid();
         let image_file_id = null;
-        if (image) {
+        if (image instanceof Blob) image_file_id = await uploadFile(image, { kind: 'document', owner_type: 'plan', owner_id: id });
+        else if (image) {
           const [head, b64] = image.split(',');
           const bin = atob(b64); const bytes = new Uint8Array(bin.length);
           for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
@@ -129,13 +134,14 @@ function Plans() {
         create('plans', { ...row, id, image_file_id });
         seen.push(row);
         ok++;
+        if (pdf) toast(row.lots.length ? `«${planLabel(row)}»: ${row.lots.length} قطعة` : `«${planLabel(row)}»: وُضع على الخريطة، ولم نجد أرقام قطع في نصه`);
       } catch (e) { toast(`${file.name}: ${e.message}`, 'err'); }
     }
     setBusy(false);
     if (ok) toast(`استُورد ${ok} مخطط`);
   };
   return <Section title="مخططات التجزئة">
-    <p className="hint">كل مخطط يظهر فوق الخريطة في مكانه، وأرقام قطعه قابلة للبحث: اكتب رقم القطعة في العرض فيقترح البرنامج موقعها. المخططات خاصة بك ولا تظهر للزوار.</p>
+    <p className="hint">اختر ملف PDF المخطط كما خرج من ArcMap أو QGIS (بإحداثياته)، ويمكن اختيار عدة ملفات معاً. كل مخطط يظهر فوق الخريطة في مكانه، وأرقام قطعه قابلة للبحث: اكتب رقم القطعة في العرض فيقترح البرنامج موقعها. المخططات خاصة بك ولا تظهر للزوار.</p>
     {plans.length === 0 && <p className="muted">لا توجد مخططات بعد.</p>}
     {plans.map((p) => <div key={p.id} className="plan-row">
       <div>
@@ -148,7 +154,7 @@ function Plans() {
       <Btn small kind="ghost" onClick={() => setDel(p)}>حذف</Btn>
     </div>)}
     <div className="row-actions">
-      <label className={`btn btn-default upload-btn${busy ? ' disabled' : ''}`}>{busy ? 'جارٍ الاستيراد…' : 'استيراد مخطط (.wasitplan.json)'}<input type="file" multiple hidden disabled={busy} onChange={(e) => { importFiles([...e.target.files]); e.target.value = ''; }} /></label>
+      <label className={`btn btn-default upload-btn${busy ? ' disabled' : ''}`}>{busy ? (typeof busy === 'string' ? busy : 'جارٍ الاستيراد…') : 'إضافة مخطط (PDF)'}<input type="file" multiple hidden accept="application/pdf,.pdf,.json,application/json" disabled={busy} onChange={(e) => { importFiles([...e.target.files]); e.target.value = ''; }} /></label>
     </div>
     {del && <Sheet title="حذف المخطط" onClose={() => setDel(null)} footer={<><Btn onClick={() => setDel(null)}>إلغاء</Btn><Btn kind="primary" onClick={() => { archive('plans', del.id); setDel(null); }}>حذف</Btn></>}>
       <p>حذف «{del.name || planLabel(del)}» من الخريطة والبحث؟ مواقع العروض التي وُضعت منه تبقى كما هي.</p>
