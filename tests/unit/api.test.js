@@ -222,3 +222,16 @@ test('الخروج يُبطل الجلسة على الخادم', async () => {
   await c.req('POST', '/api/auth/logout', {});
   assert.equal((await c.req('GET', '/api/admin/sync')).status, 401);
 });
+
+test('الصفحات غير الموجودة: صفحة عربية 404، و/submit بطلب GET يعود إلى النموذج، وواجهات API تبقى JSON', async () => {
+  const c = client();
+  const nf = await c.req('GET', '/no-such-page');
+  assert.equal(nf.status, 404);
+  assert.match(nf.body, /الصفحة غير موجودة/);
+  const sub = await c.req('GET', '/submit');
+  assert.equal(sub.status, 303);
+  assert.equal(sub.headers.get('location'), '/request');
+  assert.equal((await c.req('GET', '/api/admin/nothing')).status, 401);
+  const lots = await c.req('GET', '/lots');
+  assert.equal(lots.status, 200);
+});

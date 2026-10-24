@@ -194,7 +194,12 @@ fieldset.inline label { display: flex; align-items: center; gap: 6px; min-height
   .footer-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 720px) {
-  .main-nav { display: none; }
+  /* القائمة على الهاتف: سطر ثانٍ يُسحب أفقياً بدل إخفائها */
+  .site-header { position: static; }
+  .header-row { flex-wrap: wrap; gap: 8px 12px; min-height: 56px; padding-block: 6px 0; }
+  .main-nav { order: 3; flex: 1 0 100%; margin: 0 -16px; padding: 0 12px 6px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .main-nav::-webkit-scrollbar { display: none; }
+  .main-nav a { white-space: nowrap; padding: 6px 12px; font-size: .92rem; border: 1px solid var(--line); border-radius: 999px; }
   .header-contact { margin-inline-start: auto; }
   .header-contact .btn span { display: none; }
   .header-contact .btn { padding: 6px 10px; }
@@ -208,6 +213,7 @@ fieldset.inline label { display: flex; align-items: center; gap: 6px; min-height
   /* شريط تواصل ثابت في صفحة العقار على الهاتف */
   .property-side .contact-actions { position: fixed; bottom: 0; left: 0; right: 0; z-index: 30; background: var(--surface); border-top: 1px solid var(--line); padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr) auto; }
   .property-side .share-btn span { display: none; }
+  .property-side .contact-actions .btn { padding-inline: 10px; white-space: nowrap; }
   .property { padding-bottom: 96px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

@@ -84,6 +84,7 @@ ${body}
       ${site.contact_email ? `<p><a href="mailto:${e(site.contact_email)}">${e(site.contact_email)}</a></p>` : ''}
     </div>
     <nav aria-label="روابط">
+      ${site.__lots ? '<a href="/lots">ابحث عن قطعة</a>' : ''}
       <a href="/request">أبحث عن عقار</a>
       <a href="/offer">اعرض عقارك</a>
       <a href="/privacy">الخصوصية</a>
