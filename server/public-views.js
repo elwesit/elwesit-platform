@@ -58,6 +58,7 @@ ${staff ? `<div class="staffbar"><span>أنت مسجّل كمدير. هذه هي
     <a class="brand" href="/"><img src="/static/icon.svg" alt="" width="34" height="34"><span><strong>${e(site.site_name)}</strong><small>${e(site.site_tagline)}</small></span></a>
     <nav class="main-nav" aria-label="القائمة الرئيسية">
       <a href="/#results">العقارات</a>
+      ${site.__lots ? '<a href="/lots">ابحث عن قطعة</a>' : ''}
       <a href="/request">أبحث عن عقار</a>
       <a href="/offer">اعرض عقارك</a>
     </nav>

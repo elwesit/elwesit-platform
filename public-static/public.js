@@ -30,6 +30,7 @@
     m.attributionControl.setPrefix(false);
     return m;
   }
+  window.wasitMap = { loadLeaflet, baseMap };
   const pinIcon = () => window.L.divIcon({ className: 'wpin', html: '<svg viewBox="0 0 24 24" width="30" height="30"><path fill="#0e5a4c" stroke="#fff" stroke-width="1.5" d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7z"/><circle cx="12" cy="9" r="2.6" fill="#fff"/></svg>', iconSize: [30, 30], iconAnchor: [15, 29], popupAnchor: [0, -26] });
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 

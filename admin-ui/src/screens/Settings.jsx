@@ -118,7 +118,7 @@ function Plans() {
       area_id = uuid();
       create('areas', { id: area_id, name: ren.new_area.trim(), kind: 'area', aliases: [], moughataa_code: ren.place_verified ? ren.moughataa_code || null : null, wilaya_code: ren.place_verified ? moughataas.find((m) => m.code === ren.moughataa_code)?.wilaya_code || null : null });
     }
-    update('plans', ren.id, { name: ren.name.trim(), lotissement: ren.name.trim(), moughataa_code: ren.moughataa_code || null, area_id, place_verified: ren.place_verified ? 1 : 0 });
+    update('plans', ren.id, { name: ren.name.trim(), lotissement: ren.name.trim(), moughataa_code: ren.moughataa_code || null, area_id, place_verified: ren.place_verified ? 1 : 0, public_search: ren.public_search ? 1 : 0 });
     setRen(null);
   };
   const [toAlign, setToAlign] = useState([]); // ملفات بلا إحداثيات تنتظر الضبط بنقطتين
@@ -190,10 +190,11 @@ function Plans() {
         <b>{p.name || planLabel(p)}</b>
         <small className="muted block">{[p.lotissement, mName(p.moughataa_code) && (p.place_verified ? mName(p.moughataa_code) : `${mName(p.moughataa_code)} (غير مؤكدة)`), aName(p.area_id), p.lots?.length ? `${p.lots.length} قطعة${p.lots.some((l) => l[4]) ? `، ${p.lots.filter((l) => l[4]).length} بحدودها` : ''}` : 'بلا فهرس قطع', p.source_date && `بتاريخ ${p.source_date}`, p.georef === 'geopdf' ? 'إحداثيات من الملف نفسه' : p.georef === 'points' ? 'مضبوط بنقاط مرجعية' : ''].filter(Boolean).join(' · ')}</small>
         {p.source_name && <small className="muted block">المصدر: {p.source_name}</small>}
+        {!!p.public_search && <span className="tag ok">متاح للبحث في الموقع</span>}
       </div>
       {p.image_file_id && <label className="inline-check"><input type="checkbox" checked={!!p.visible} onChange={(e) => update('plans', p.id, { visible: e.target.checked })} /> يظهر على الخريطة</label>}
       {p.image_file_id && <a className="btn btn-default btn-sm" href={fileUrl({ id: p.image_file_id })} target="_blank" rel="noopener">الصورة</a>}
-      <Btn small kind="ghost" onClick={() => setRen({ id: p.id, name: planLabel(p), moughataa_code: p.moughataa_code, area_id: aName(p.area_id) ? p.area_id : null, place_verified: !!p.place_verified })}>تعديل</Btn>
+      <Btn small kind="ghost" onClick={() => setRen({ id: p.id, name: planLabel(p), moughataa_code: p.moughataa_code, area_id: aName(p.area_id) ? p.area_id : null, place_verified: !!p.place_verified, public_search: !!p.public_search })}>تعديل</Btn>
       <Btn small kind="ghost" onClick={() => setDel(p)}>حذف</Btn>
     </div>)}
     <div className="row-actions">
@@ -206,6 +207,8 @@ function Plans() {
       <Field label="المنطقة أو الحي"><Select aria-label="المنطقة أو الحي" value={ren.area_id} onChange={(x) => setRen({ ...ren, area_id: x, place_verified: false })} placeholder="غير محددة" options={[...areas.slice().sort((a, b) => (b.moughataa_code === ren.moughataa_code) - (a.moughataa_code === ren.moughataa_code) || a.name.localeCompare(b.name, 'ar')).map((a) => [a.id, a.moughataa_code && a.moughataa_code !== ren.moughataa_code ? `${a.name} (${mName(a.moughataa_code)})` : a.name]), ['+', 'منطقة جديدة…']]} /></Field>
       {ren.area_id === '+' && <Field label="اسم المنطقة الجديدة"><Input value={ren.new_area || ''} onChange={(x) => setRen({ ...ren, new_area: x })} /></Field>}
       <label className="inline-check"><input type="checkbox" checked={!!ren.place_verified} onChange={(e) => setRen({ ...ren, place_verified: e.target.checked })} /> تحققت أن المخطط يتبع هذه المقاطعة والمنطقة</label>
+      <label className="inline-check"><input type="checkbox" checked={!!ren.public_search} onChange={(e) => setRen({ ...ren, public_search: e.target.checked })} /> متاح للبحث العام في الموقع</label>
+      <p className="hint">عند الإتاحة يبحث الزائر عن قطعة واحدة برقمها فيرى مكانها وحدودها وأضلاعها فقط. صورة المخطط لا تُنشر، ولا تظهر قائمة القطع. تأكد أن لديك الحق في إتاحة بيانات هذا المخطط.</p>
       <p className="hint">المقاطعة تُقترح من موقع المخطط على الخريطة وتبقى «غير مؤكدة» حتى تؤكدها. البحث بالخانات يعرض المخطط تحت المقاطعة والمنطقة المختارتين هنا.</p>
     </Sheet>}
     {del && <Sheet title="حذف المخطط" onClose={() => setDel(null)} footer={<><Btn onClick={() => setDel(null)}>إلغاء</Btn><Btn kind="primary" onClick={() => { archive('plans', del.id); setDel(null); }}>حذف</Btn></>}>
