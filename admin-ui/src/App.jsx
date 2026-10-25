@@ -13,6 +13,7 @@ import Appointments from './screens/Appointments.jsx';
 import Deals from './screens/Deals.jsx';
 import Settings from './screens/Settings.jsx';
 import Capture from './screens/Capture.jsx';
+import Stats from './screens/Stats.jsx';
 
 const NAV = [
   ['today', 'اليوم', 'today'],
@@ -22,6 +23,7 @@ const NAV = [
   ['people', 'العملاء', 'people'],
   ['appointments', 'المواعيد', 'calendar'],
   ['deals', 'الصفقات', 'deal'],
+  ['stats', 'الإحصاءات', 'chart'],
   ['settings', 'الإعدادات', 'settings'],
 ];
 
@@ -52,6 +54,7 @@ function Shell() {
     case 'deals': screen = <Deals route={route} wide={wide} />; break;
     case 'settings': screen = <Settings route={route} />; break;
     case 'capture': screen = <Capture route={route} />; break;
+    case 'stats': screen = <Stats />; break;
     case 'search': screen = <SearchScreen q={route.query.q || ''} />; break;
     default: screen = <Today wide={wide} />;
   }

@@ -20,6 +20,17 @@ function bootstrapUser(prefix, name, label) {
 function bootstrapAdmin() {
   bootstrapUser('WASIT_ADMIN', 'المدير', 'حساب المالك');
   if (config.preview) bootstrapUser('WASIT_E2E', 'اختبار آلي', 'حساب الاختبار (معاينة فقط)');
+  else removeTestUser();
+}
+
+// خارج المعاينة لا يبقى حساب الاختبار الآلي: يُحذف مع جلساته، أو يُعطَّل إن ارتبطت به سجلات
+function removeTestUser() {
+  const email = (process.env.WASIT_E2E_EMAIL || '').trim();
+  const u = email && db().prepare('SELECT id FROM users WHERE email = ?').get(email);
+  if (!u) return;
+  db().prepare('DELETE FROM sessions WHERE user_id = ?').run(u.id);
+  try { db().prepare('DELETE FROM users WHERE id = ?').run(u.id); console.log('[bootstrap] حُذف حساب الاختبار', email); }
+  catch { db().prepare("UPDATE users SET role = 'none' WHERE id = ?").run(u.id); console.log('[bootstrap] عُطّل حساب الاختبار', email); }
 }
 
 openDatabases();

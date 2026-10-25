@@ -7,7 +7,7 @@ import { config } from './config.js';
 import { submitInbox } from './inbox-intake.js';
 import { isStaff, rateLimit, sameOrigin } from './auth.js';
 import { layout, card, waAsk, searchForm, inboxForm, priceText, featuresList, safeJson, icon } from './public-views.js';
-import { escapeHtml as e, norm, normLot } from '../shared/text.js';
+import { escapeHtml as e, norm, normLot, slugify } from '../shared/text.js';
 import { TYPES, DEALS_PUBLIC } from '../shared/vocab.js';
 import { formatNumber } from '../shared/money.js';
 import { normalizePhone } from '../shared/phone.js';
@@ -15,6 +15,8 @@ import { directionsLinks } from '../shared/geolink.js';
 import { lotPrecision, sidesText, planMatches } from '../shared/plans.js';
 import { measure } from '../shared/lotShapes.js';
 import { elevationAt } from './geo/elevation.js';
+import { recordHit, isBot } from './stats.js';
+import { ogImageFile, ogKey, OG_W, OG_H } from './og-image.js';
 
 const VERSION = Date.now().toString(36);
 const uploadPublic = multer({ storage: multer.memoryStorage(), limits: { fileSize: 12 * 1024 * 1024, files: 6, fields: 30, fieldSize: 8000 } });
@@ -29,6 +31,36 @@ function site() {
   return s;
 }
 function geo() { return site().geo || { wilayas: [], moughataas: [] }; }
+
+// صفحات المقاطعات: /m/tevragh-zeina و /m/tevragh-zeina/sale و /m/tevragh-zeina/rent
+const DEAL_PATH = { sale: 'للبيع', rent: 'للإيجار' };
+function areaIndex() {
+  const g = geo();
+  const wil = Object.fromEntries(g.wilayas.map((w) => [w.code, w.name_ar]));
+  const seen = new Set();
+  return g.moughataas.map((m) => {
+    let slug = slugify(m.name_fr) || m.code.toLowerCase();
+    if (seen.has(slug)) slug = m.code.toLowerCase();
+    seen.add(slug);
+    return { ...m, slug, wilaya: wil[m.wilaya_code] || '' };
+  });
+}
+const countAr = (n) => (n === 1 ? 'عرض واحد' : n === 2 ? 'عرضان' : n <= 10 ? `${formatNumber(n)} عروض` : `${formatNumber(n)} عرضاً`);
+const areaUrl = (a, deal) => `/m/${a.slug}${deal ? '/' + deal : ''}`;
+// عدد العروض المنشورة لكل مقاطعة ونوع عملية
+function areaCounts() {
+  const out = {};
+  for (const r of publicReadDb().prepare('SELECT moughataa_code m, deal, COUNT(*) c FROM listings WHERE moughataa_code IS NOT NULL GROUP BY moughataa_code, deal').all()) {
+    out[r.m] ||= { all: 0 };
+    out[r.m][r.deal] = r.c; out[r.m].all += r.c;
+  }
+  return out;
+}
+function areaLinks(counts) {
+  const items = areaIndex().filter((a) => counts[a.code]?.all).sort((a, b) => counts[b.code].all - counts[a.code].all);
+  if (!items.length) return '';
+  return `<section class="wrap areas-nav"><h2>تصفح حسب المقاطعة</h2><ul class="area-links">${items.map((a) => `<li><a href="${areaUrl(a)}">${e(a.name_ar)} <small>${formatNumber(counts[a.code].all)}</small></a></li>`).join('')}</ul></section>`;
+}
 
 function baseUrl(req, s) {
   return (s.base_url || config.baseUrl || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
@@ -118,7 +150,8 @@ export function publicRouter() {
   ${items.length ? `<div class="grid" id="grid">${items.map((l) => card(l, askCtx(req, s))).join('')}</div>` : `<div class="empty"><p>${filtered ? 'لا توجد عقارات منشورة تطابق بحثك حالياً.' : 'لا توجد عقارات منشورة حالياً.'}</p><a class="btn btn-primary" href="/request">أرسل طلبك وسنبحث لك</a></div>`}
   ${next ? `<div class="more-wrap"><a class="btn btn-outline" id="load-more" href="?${qs ? qs + '&' : ''}cursor=${encodeURIComponent(next)}#results" data-next="${e(next)}">عرض المزيد</a></div>` : ''}
   </div>
-</section>`;
+</section>
+${filtered ? '' : areaLinks(areaCounts())}`;
     res.send(layout(s, { body, canonical: baseUrl(req, s) + '/', staff: isStaff(req.user), head: mapHead(s) }));
   });
 
@@ -144,6 +177,7 @@ export function publicRouter() {
     const tel = normalizePhone(s.contact_phone || '');
     const feats = featuresList(l);
     const dir = l.lat != null ? directionsLinks(l.lat, l.lng) : null;
+    const area = l.moughataa_code ? areaIndex().find((a) => a.code === l.moughataa_code) : null;
     const facts = [
       ['النوع', TYPES[l.type]], ['العملية', DEALS_PUBLIC[l.deal]], ['المساحة', l.area_m2 ? `${formatNumber(l.area_m2)} م²` : null],
       ['رقم القطعة', l.lot_number || null], ['المخطط', l.plan || null], ['القطاع', l.sector || null],
@@ -153,7 +187,7 @@ export function publicRouter() {
     if (!l.price_hidden && l.price_amount != null) jsonld.offers = { '@type': 'Offer', price: l.price_currency === 'MRO' ? l.price_amount / 10 : l.price_amount, priceCurrency: 'MRU' };
     const body = `
 <article class="wrap property" data-ref="${e(l.ref)}">
-  <nav class="crumbs"><a href="/">العقارات</a> ‹ <span>${e(l.ref)}</span></nav>
+  <nav class="crumbs"><a href="/">العقارات</a> ‹ ${area ? `<a href="${areaUrl(area, l.deal)}">${e(DEAL_PATH[l.deal] ? `${DEAL_PATH[l.deal]} في ${area.name_ar}` : area.name_ar)}</a> ‹ ` : ''}<span>${e(l.ref)}</span></nav>
   ${photos.length ? `<div class="gallery" tabindex="0" aria-label="صور العقار">${photos.map((ph, i) => `<figure><img src="/media/${encodeURIComponent(l.ref)}/${ph.key}.webp" alt="${e(l.title)} — صورة ${i + 1}" ${i ? 'loading="lazy"' : 'fetchpriority="high"'} width="${ph.w}" height="${ph.h}"></figure>`).join('')}</div>${photos.length > 1 ? `<p class="gallery-hint">${photos.length} صور — اسحب للمزيد</p>` : ''}` : `<div class="noimg-hero">${e(TYPES[l.type] || 'عقار')}</div>`}
   <div class="property-grid">
     <div class="property-main">
@@ -180,7 +214,7 @@ export function publicRouter() {
         <div class="contact-actions">
           ${tel ? `<a class="btn btn-primary btn-block" href="tel:+${tel}">${icon.phone}<span>اتصل</span></a>` : ''}
           ${waAsk(l, askCtx(req, s), 'btn-block')}
-          <button class="btn btn-outline btn-block share-btn" type="button" data-url="${e(url)}" data-title="${e(l.title)}">${icon.share}<span>مشاركة الرابط</span></button>
+          <button class="btn btn-outline btn-block share-btn" type="button" data-url="${e(url)}?src=share" data-title="${e(l.title)}">${icon.share}<span>مشاركة الرابط</span></button>
         </div>
         <h3>أو اترك رقمك ونتصل بك</h3>
         ${inboxForm('interest', { token: crypto.randomUUID(), site: s, property: l })}
@@ -189,7 +223,58 @@ export function publicRouter() {
   </div>
 </article>
 <script type="application/ld+json">${JSON.stringify(jsonld).replace(/</g, '\\u003c')}</script>`;
-    res.send(layout(s, { title: l.title, description: [DEALS_PUBLIC[l.deal], l.place_label, l.area_m2 ? `${formatNumber(l.area_m2)} م²` : '', p.main].filter(Boolean).join(' · '), canonical: url, ogImage: photos[0] ? `${baseUrl(req, s)}/media/${encodeURIComponent(l.ref)}/${photos[0].key}.webp` : `${baseUrl(req, s)}/static/og.png`, body, staff: isStaff(req.user), head: mapHead(s) }));
+    res.send(layout(s, { title: l.title, description: [DEALS_PUBLIC[l.deal], l.place_label, l.area_m2 ? `${formatNumber(l.area_m2)} م²` : '', p.main].filter(Boolean).join(' · '), canonical: url, ogImage: { url: `${baseUrl(req, s)}/og/${encodeURIComponent(l.ref)}.jpg?v=${ogKey(l, s)}`, width: OG_W, height: OG_H }, body, staff: isStaff(req.user), head: mapHead(s) }));
+  });
+
+  // صورة المشاركة: تُخدم فقط ما دام العرض منشوراً
+  r.get('/og/:file', async (req, res, next) => {
+    const m = /^(.{1,20})\.jpg$/.exec(req.params.file);
+    const l = m && publicReadDb().prepare('SELECT * FROM listings WHERE ref = ?').get(m[1]);
+    if (!l) return next();
+    try {
+      const file = await ogImageFile(l, site(), priceText(l).main);
+      res.set('Cache-Control', 'public, max-age=86400');
+      res.type('image/jpeg').sendFile(file);
+    } catch (err) {
+      console.error('[og]', err);
+      res.redirect(302, '/static/og.png');
+    }
+  });
+
+  // إحصاءات مجمّعة: زيارة صفحة، نقرة واتساب، مشاركة. لا يُحسب المدير ولا برامج المعاينة.
+  r.post('/api/public/hit', (req, res) => {
+    if (!sameOrigin(req)) return res.status(403).json({ ok: false });
+    if (isStaff(req.user) || isBot(req.get('user-agent'))) return res.json({ ok: true, skipped: true });
+    if (!rateLimit('hit:' + req.ip, 300, 10 * 60000)) return res.status(429).json({ ok: false });
+    const b = req.body || {};
+    const out = recordHit({ ev: String(b.ev || ''), page: String(b.page || ''), ref: b.ref ? String(b.ref) : '', src: b.src, refHost: b.ref_host });
+    res.status(out.error ? 400 : 200).json(out.error ? { ok: false, error: out.error } : out);
+  });
+
+  r.get(['/m/:slug', '/m/:slug/:deal'], (req, res, next) => {
+    const a = areaIndex().find((x) => x.slug === req.params.slug);
+    const deal = req.params.deal;
+    if (!a || (deal && !DEAL_PATH[deal])) return next();
+    const s = site();
+    const counts = areaCounts()[a.code] || { all: 0 };
+    const { items, total } = listListings({ loc: 'm:' + a.code, deal: deal || '' }, { limit: 60 });
+    const what = deal ? `عقارات ${DEAL_PATH[deal]}` : 'عقارات للبيع والإيجار';
+    const title = `${what} في ${a.name_ar}`;
+    const description = total
+      ? `${countAr(total)} ${deal ? DEAL_PATH[deal] : 'للبيع والإيجار'} في ${a.name_ar}${a.wilaya ? '، ' + a.wilaya : ''}: منازل وشقق وقطع أرضية بالصور والأسعار والموقع على الخريطة، وتواصل مباشر عبر واتساب.`
+      : `لا توجد عروض منشورة حالياً في ${a.name_ar}. أرسل طلبك وسنبحث لك.`;
+    const tab = (d, label, n) => `<a href="${areaUrl(a, d)}" class="${(deal || '') === (d || '') ? 'on' : ''}"${(deal || '') === (d || '') ? ' aria-current="page"' : ''}>${label}${n ? ` <small>${formatNumber(n)}</small>` : ''}</a>`;
+    const others = areaIndex().filter((x) => x.wilaya_code === a.wilaya_code && x.code !== a.code);
+    const body = `<section class="wrap area-page">
+  <nav class="crumbs"><a href="/">العقارات</a> ‹ <span>${e(a.wilaya)}</span></nav>
+  <h1>${e(title)}</h1>
+  <p class="lead">${e(description)}</p>
+  <nav class="area-tabs" aria-label="نوع العملية">${tab('', 'الكل', counts.all)}${tab('sale', 'للبيع', counts.sale)}${tab('rent', 'للإيجار', counts.rent)}</nav>
+  ${items.length ? `<div class="grid">${items.map((l) => card(l, askCtx(req, s))).join('')}</div>${total > items.length ? `<div class="more-wrap"><a class="btn btn-outline" href="/?loc=m:${e(a.code)}${deal ? '&deal=' + deal : ''}#results">كل العروض (${formatNumber(total)})</a></div>` : ''}` : `<div class="empty"><p>لا توجد عروض منشورة هنا حالياً.</p><a class="btn btn-primary" href="/request">أرسل طلبك وسنبحث لك</a></div>`}
+  <p class="hero-actions"><a class="btn btn-outline" href="/request">لم تجد ما تريد؟ أرسل طلبك</a><a class="btn btn-outline" href="/offer">اعرض عقارك في ${e(a.name_ar)}</a></p>
+  ${others.length ? `<h2>مقاطعات قريبة</h2><ul class="area-links">${others.map((x) => `<li><a href="${areaUrl(x, deal)}">${e(x.name_ar)}</a></li>`).join('')}</ul>` : ''}
+</section>`;
+    res.send(layout(s, { title, description, canonical: baseUrl(req, s) + areaUrl(a, deal), body, staff: isStaff(req.user), noindex: !total }));
   });
 
   const formPage = (kind, title, intro) => (req, res) => {
@@ -286,7 +371,7 @@ export function publicRouter() {
   r.get('/sitemap.xml', (req, res) => {
     const s = site(); const b = baseUrl(req, s);
     const rows = publicReadDb().prepare('SELECT ref, updated_at FROM listings ORDER BY published_at DESC LIMIT 5000').all();
-    res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n<url><loc>${b}/</loc></url>\n<url><loc>${b}/request</loc></url>\n<url><loc>${b}/offer</loc></url>\n${s.__lots ? `<url><loc>${b}/lots</loc></url>\n` : ''}${rows.map((r) => `<url><loc>${b}/p/${encodeURIComponent(r.ref)}</loc><lastmod>${r.updated_at.slice(0, 10)}</lastmod></url>`).join('\n')}\n</urlset>`);
+    res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n<url><loc>${b}/</loc></url>\n<url><loc>${b}/request</loc></url>\n<url><loc>${b}/offer</loc></url>\n${s.__lots ? `<url><loc>${b}/lots</loc></url>\n` : ''}${areaSitemap(b)}${rows.map((r) => `<url><loc>${b}/p/${encodeURIComponent(r.ref)}</loc><lastmod>${r.updated_at.slice(0, 10)}</lastmod></url>`).join('\n')}\n</urlset>`);
   });
   // صفحة «غير موجودة» بالعربية بدل رسالة Express الافتراضية
   r.use((req, res, next) => {
@@ -295,6 +380,11 @@ export function publicRouter() {
     res.status(404).send(layout(s, { title: 'الصفحة غير موجودة', body: `<section class="wrap narrow page"><h1>الصفحة غير موجودة</h1><p>ربما تغيّر الرابط أو كُتب خطأ.</p><p class="hero-actions"><a class="btn btn-primary" href="/">العقارات المعروضة</a><a class="btn btn-outline" href="/request">أبحث عن عقار</a></p></section>`, staff: isStaff(req.user) }));
   });
   return r;
+}
+
+function areaSitemap(b) {
+  const counts = areaCounts();
+  return areaIndex().filter((a) => counts[a.code]?.all).flatMap((a) => ['', ...Object.keys(DEAL_PATH).filter((d) => counts[a.code][d])].map((d) => `<url><loc>${b}${areaUrl(a, d)}</loc></url>\n`)).join('');
 }
 
 function mapHead(s) {
@@ -308,6 +398,7 @@ function privacyPage(s) {
 <p>آخر تحديث: ${new Date().toISOString().slice(0, 7)}. تشرح هذه الصفحة كيف يتعامل ${e(s.business_name_legal || s.site_name)} مع المعلومات التي ترسلها عبر هذا الموقع.</p>
 <h2>ما نجمعه</h2><p>عند إرسال نموذج («أبحث عن عقار»، «اعرض عقارك»، الاهتمام بعقار، أو الاستفسار) نحفظ ما تكتبه: الاسم إن ذكرته، رقم الهاتف، تفاصيل الطلب أو العرض، والصور التي ترفعها. لا يلزم إنشاء حساب لتصفح الموقع.</p>
 <p>لحماية الموقع من الإساءة نستخدم عنوان الشبكة (IP) مؤقتاً في الذاكرة لتحديد عدد الإرسالات، ولا نحفظه مع طلبك. لا نستخدم ملفات تتبع إعلانية.</p>
+<p>نحسب أعداداً إجمالية لزيارات الصفحات والنقر على «واتساب» والمشاركة، ومن أين جاء الزائر (مثل فيسبوك أو بحث Google)، لنعرف ما يهم الزوار. هذه الأعداد لا تتضمن اسمك أو رقمك أو عنوان شبكتك، ولا نضع كعكات تتبع.</p>
 <h2>كيف نستخدمه</h2><p>للتواصل معك بخصوص طلبك أو عرضك، وللبحث عن عقارات مناسبة لك. لا نبيع بياناتك ولا ننشر رقمك. صور العقار التي ترسلها لا تُنشر إلا بعد مراجعتها والاتفاق معك.</p>
 <h2>الصور وبيانات الموقع</h2><p>عند نشر صورة عقار نزيل منها البيانات الوصفية المضمنة مثل إحداثيات GPS. قد يُعرض موقع العقار تقريبياً أو يُخفى حسب ما يتفق عليه مع صاحب العرض.</p>
 <h2>المدة وحقوقك</h2><p>نحتفظ بالمعلومات ما دامت لازمة لمتابعة طلبك أو لالتزامات العمل. يمكنك طلب الاطلاع على بياناتك أو تصحيحها أو حذفها بالتواصل معنا${s.contact_phone ? ' على ' + e(s.contact_phone) : ''}.</p>

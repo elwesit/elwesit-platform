@@ -61,3 +61,8 @@ export function nameSimilarity(a, b) {
   for (const v of B.values()) total += v;
   return total ? (2 * inter) / total : 0;
 }
+
+// اسم لاتيني → جزء رابط (Tevragh Zeina → tevragh-zeina) لصفحات المقاطعات
+export function slugify(s) {
+  return String(s || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}

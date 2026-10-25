@@ -12,8 +12,9 @@ import { TYPES, DEALS_PUBLIC } from '../shared/vocab.js';
 import { norm, normLot } from '../shared/text.js';
 import { touchRow } from './entities.js';
 import { privatePath } from './media.js';
+import { dropOgCache } from './og-image.js';
 
-const PUBLIC_SETTING_KEYS = ['site_name', 'site_tagline', 'site_intro', 'contact_phone', 'contact_whatsapp', 'contact_email', 'office_address', 'office_hours', 'business_name_legal', 'base_url', 'map_tiles_url', 'map_tiles_attribution', 'map_tiles_max_zoom', 'map_center', 'map_zoom', 'listing_page_size', 'privacy_extra', 'terms_extra'];
+const PUBLIC_SETTING_KEYS = ['site_name', 'site_tagline', 'site_intro', 'contact_phone', 'contact_whatsapp', 'contact_email', 'office_address', 'office_hours', 'business_name_legal', 'base_url', 'map_tiles_url', 'map_tiles_attribution', 'map_tiles_max_zoom', 'map_center', 'map_zoom', 'listing_page_size', 'privacy_extra', 'terms_extra', 'google_site_verification', 'facebook_domain_verification'];
 
 export function syncPublicSettings() {
   const s = getSettings();
@@ -25,7 +26,7 @@ export function syncPublicSettings() {
     // التقسيم الإداري (بيانات مرجعية عامة) لنموذج البحث
     up.run('geo', JSON.stringify({
       wilayas: db().prepare('SELECT code, name_ar FROM wilayas ORDER BY sort').all(),
-      moughataas: db().prepare('SELECT code, wilaya_code, name_ar FROM moughataas ORDER BY name_ar').all(),
+      moughataas: db().prepare('SELECT code, wilaya_code, name_ar, name_fr FROM moughataas ORDER BY name_ar').all(),
     }));
   })();
 }
@@ -139,6 +140,7 @@ export function unpublishProperty(id, user, reason = '') {
   if (!p) return { error: 'غير موجود' };
   publicWriteDb().prepare('DELETE FROM listings WHERE ref = ?').run(p.ref);
   fs.rmSync(path.join(config.publicMediaDir, p.ref), { recursive: true, force: true });
+  dropOgCache(p.ref);
   if (p.published) { touchRow('properties', p.id, { published: 0 }); audit(user?.id, 'unpublish', 'properties', p.id, reason); }
   return { ok: true };
 }
