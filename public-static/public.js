@@ -258,6 +258,39 @@
     (known ? f.elements.message : f.elements.name).focus();
   }
 
+  // ---------- إحصاءات مجمّعة (بلا كعكات ولا هوية) ----------
+  // المصدر يُحدَّد عند أول صفحة في الزيارة: ?src= في الرابط أو الموقع المُحيل، ويُتذكّر طوال الجلسة
+  const SRC_KEY = 'wasit-src';
+  const ss = { get: () => { try { return sessionStorage.getItem(SRC_KEY) || ''; } catch { return ''; } }, set: (v) => { try { sessionStorage.setItem(SRC_KEY, v); } catch {} } };
+  const pageType = (() => {
+    const p = location.pathname;
+    if (p === '/') return 'home';
+    if (p.startsWith('/p/')) return 'listing';
+    if (p.startsWith('/lots')) return 'lots';
+    if (p.startsWith('/m/')) return 'area';
+    if (['/request', '/offer', '/contact'].includes(p)) return 'form';
+    return 'other';
+  })();
+  function hit(data) {
+    try {
+      return fetch('/api/public/hit', { method: 'POST', keepalive: true, headers: { 'content-type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ page: pageType, src: ss.get(), ...data }) })
+        .then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    } catch { return Promise.resolve(null); }
+  }
+  if (!document.querySelector('.staffbar')) {
+    const urlSrc = new URLSearchParams(location.search).get('src') || '';
+    let refHost = '';
+    try { const r = document.referrer ? new URL(document.referrer) : null; if (r && r.host !== location.host) refHost = r.hostname; } catch {}
+    const viewRef = pageType === 'listing' ? ($('.property')?.dataset.ref || '') : '';
+    hit({ ev: 'view', ref: viewRef, ...(urlSrc || refHost ? { src: urlSrc, ref_host: refHost } : {}) }).then((j) => { if (j && j.src && (urlSrc || refHost || !ss.get())) ss.set(j.src); });
+    document.addEventListener('click', (ev) => {
+      const a = ev.target.closest && ev.target.closest('a.wa-ask, .share-btn');
+      if (!a) return;
+      const ref = a.dataset.ref || a.closest('[data-ref]')?.dataset.ref || '';
+      if (ref) hit({ ev: a.classList.contains('share-btn') ? 'share' : 'wa', ref });
+    }, true);
+  }
+
   document.addEventListener('click', (ev) => {
     const a = ev.target.closest && ev.target.closest('a.wa-ask');
     if (!a || ev.defaultPrevented || ev.button || ev.metaKey || ev.ctrlKey || typeof HTMLDialogElement !== 'function') return;

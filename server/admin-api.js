@@ -17,6 +17,7 @@ import { matchRequestProperty, rankMatches } from '../shared/matching.js';
 import { parseLocation, SHORT_LINK_HOSTS } from '../shared/geolink.js';
 import { normalizePhone } from '../shared/phone.js';
 import { DEFAULT_SETTINGS } from './defaults.js';
+import { statsSummary } from './stats.js';
 
 const wrap = (fn) => async (req, res, next) => { try { await fn(req, res, next); } catch (e) { next(e); } };
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.maxUploadMB * 1024 * 1024, files: 1 } });
@@ -112,6 +113,8 @@ export function adminRouter() {
     audit(req.user.id, 'settings', 'settings', null, Object.keys(body).join(','));
     res.json({ settings: getSettings() });
   });
+
+  r.get('/stats', (req, res) => res.json(statsSummary(req.query.days)));
 
   r.get('/today', (req, res) => {
     const s = getSettings();

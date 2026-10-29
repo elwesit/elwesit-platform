@@ -23,6 +23,9 @@ export const DEFAULT_SETTINGS = {
   listing_page_size: 10,
   privacy_extra: '',
   terms_extra: '',
+  // رموز التحقق من ملكية الموقع (Google Search Console وFacebook Business) — تُضاف كوسوم meta
+  google_site_verification: '',
+  facebook_domain_verification: '',
 };
 
 export const DEFAULT_TEMPLATES = [

@@ -80,7 +80,7 @@ export function propertyTitle(p) {
 }
 
 // نص مشاركة يحترم خيارات الإخفاء ولا يتضمن الملاحظات الداخلية أو المصدر أو المالك
-export function shareText(p, settings, tpl) {
+export function shareText(p, settings, tpl, { src } = {}) {
   const base = (settings?.base_url || location.origin).replace(/\/$/, '');
   const showPrice = p.pub_show_price && p.price_amount != null && p.price_currency !== 'unknown';
   const mru = showPrice ? toMRU(p.price_amount, p.price_currency) : null;
@@ -91,12 +91,26 @@ export function shareText(p, settings, tpl) {
     area: p.area_m2 ? `المساحة: ${p.area_m2} م²${p.pub_show_lot && p.lot_number ? ` (قطعة ${p.lot_number})` : ''}\n` : '',
     price: showPrice ? `السعر: ${formatAmountWords(mru)} أوقية جديدة (${formatAmountWords(mru * 10)} قديمة)${p.price_basis !== 'total' ? ' ' + ({ monthly: 'شهرياً', yearly: 'سنوياً', daily: 'يومياً', per_m2: 'للمتر' }[p.price_basis] || '') : ''}` : 'السعر عند التواصل',
     ref: p.ref,
-    link: p.published ? `${base}/p/${encodeURIComponent(p.ref)}` : '',
+    link: p.published ? `${base}/p/${encodeURIComponent(p.ref)}${src ? '?src=' + src : ''}` : '',
     site_name: settings?.site_name || '',
     name: '',
   };
   return fillTemplate(tpl || '{deal_label}: {title}\n📍 {place}\n{area}{price}\nالمرجع: {ref}\n{link}', vars);
 }
+// المنصات في «نص المشاركة»: كل منصة تضيف ?src= إلى الرابط لتظهر في الإحصاءات
+export const SHARE_CHANNELS = [['wa', 'واتساب'], ['fb', 'فيسبوك'], ['tt', 'تيك توك'], ['ig', 'إنستغرام']];
+const tag = (s) => '#' + String(s || '').trim().replace(/\s+/g, '_');
+export function hashtags(p) {
+  const m = p.moughataa_code && table('moughataas').find((x) => x.code === p.moughataa_code);
+  return [tag('نواكشوط'), tag(p.deal === 'rent' ? 'إيجار' : 'بيع'), tag(TYPES[p.type] || 'عقارات'), m ? tag(m.name_ar) : '', tag('عقارات_موريتانيا')].filter((x) => x.length > 1).join(' ');
+}
+export function channelText(p, settings, tpl, channel) {
+  const text = shareText(p, settings, tpl, { src: channel });
+  if (channel === 'fb') return `${text}\n\n📩 للاستفسار: اضغط الرابط ثم «استفسر عبر واتساب»\n${hashtags(p)}`;
+  if (channel === 'tt' || channel === 'ig') return `${text}\n\n🔗 الرابط في البايو · اكتب «مهتم» في التعليقات\n${hashtags(p)}`;
+  return text;
+}
+
 export function fillTemplate(body, vars) {
   return String(body || '').replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '').replace(/\n{3,}/g, '\n\n').trim();
 }

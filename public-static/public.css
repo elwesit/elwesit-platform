@@ -237,3 +237,17 @@ fieldset.inline label { display: flex; align-items: center; gap: 6px; min-height
 .tag.prec-label, .tag.prec-approx { background: #fbf0d6; color: #7a5a00; }
 .lot-side span { display: inline-block; transform: translate(-50%, -50%); background: rgba(255,255,255,.94); border: 1px solid #7a4ab8; color: #4a2a7a; border-radius: 6px; padding: 0 5px; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .lot-side { background: none; border: none; }
+
+/* صفحات المقاطعات وروابطها */
+.area-page { padding-top: 20px; padding-bottom: 32px; }
+.area-page h2 { margin-top: 28px; font-size: 1.15rem; }
+.area-tabs { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); margin-bottom: 16px; }
+.area-tabs a { display: flex; align-items: center; gap: 6px; padding: 8px 16px; text-decoration: none; color: var(--ink); min-height: 42px; }
+.area-tabs a.on { background: var(--brand); color: #fff; }
+.area-tabs small { opacity: .8; }
+.areas-nav { padding-top: 8px; padding-bottom: 32px; }
+.areas-nav h2 { font-size: 1.15rem; }
+.area-links { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.area-links a { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; min-height: 40px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); text-decoration: none; color: var(--ink); }
+.area-links a:hover { border-color: var(--brand); color: var(--brand); }
+.area-links small { color: var(--muted); }

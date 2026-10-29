@@ -25,7 +25,15 @@ const icon = {
 };
 export { icon };
 
-export function layout(site, { title, description, canonical, ogImage, body, staff, head = '', bodyClass = '' }) {
+// رمز التحقق: يقبل الرمز وحده أو وسم meta كاملاً كما ينسخه صاحب الموقع من Google/Facebook
+export function verificationToken(v) {
+  const s = String(v || '').trim();
+  const m = s.match(/content\s*=\s*["']([^"']+)["']/i);
+  const t = (m ? m[1] : s).trim();
+  return /^[A-Za-z0-9_\-.=+/]{4,200}$/.test(t) ? t : '';
+}
+
+export function layout(site, { title, description, canonical, ogImage, body, staff, head = '', bodyClass = '', noindex = false }) {
   const t = title ? `${title} | ${site.site_name}` : `${site.site_name} — ${site.site_tagline}`;
   const wa = normalizePhone(site.contact_whatsapp || site.contact_phone || '');
   const tel = normalizePhone(site.contact_phone || '');
@@ -43,9 +51,11 @@ ${canonical ? `<link rel="canonical" href="${e(canonical)}">` : ''}
 <meta property="og:title" content="${e(title || site.site_name)}">
 <meta property="og:description" content="${e(description || site.site_tagline)}">
 ${canonical ? `<meta property="og:url" content="${e(canonical)}">` : ''}
-${ogImage ? `<meta property="og:image" content="${e(ogImage)}"><meta name="twitter:card" content="summary_large_image">` : ''}
+${ogImage ? `<meta property="og:image" content="${e(typeof ogImage === 'string' ? ogImage : ogImage.url)}">${ogImage.width ? `<meta property="og:image:width" content="${ogImage.width}"><meta property="og:image:height" content="${ogImage.height}">` : ''}<meta name="twitter:card" content="summary_large_image">` : ''}
 <meta name="theme-color" content="#0e5a4c">
-${config.preview ? '<meta name="robots" content="noindex, nofollow">' : ''}
+${config.preview ? '<meta name="robots" content="noindex, nofollow">' : noindex ? '<meta name="robots" content="noindex, follow">' : ''}
+${verificationToken(site.google_site_verification) ? `<meta name="google-site-verification" content="${e(verificationToken(site.google_site_verification))}">` : ''}
+${verificationToken(site.facebook_domain_verification) ? `<meta name="facebook-domain-verification" content="${e(verificationToken(site.facebook_domain_verification))}">` : ''}
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/public.css?v=${site.__v}">
 ${head}

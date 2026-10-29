@@ -54,6 +54,11 @@ function SiteSettings({ settings }) {
         <Field label="عدد العقارات في الصفحة الأولى"><NumInput value={v.listing_page_size} onChange={set('listing_page_size')} /></Field>
       </div>
     </Section>
+    <Section title="محركات البحث وفيسبوك" collapsible defaultOpen={!!(v.google_site_verification || v.facebook_domain_verification)}>
+      <p className="hint">لإثبات ملكية الموقع في Google Search Console أو Facebook Business: اختر طريقة «وسم HTML» (HTML tag)، وانسخ الوسم كاملاً أو الرمز وحده والصقه هنا، ثم احفظ واضغط «تحقق» هناك.</p>
+      <Field label="Google Search Console"><Input value={v.google_site_verification} onChange={set('google_site_verification')} dir="ltr" placeholder='<meta name="google-site-verification" content="…">' /></Field>
+      <Field label="Facebook (التحقق من النطاق)"><Input value={v.facebook_domain_verification} onChange={set('facebook_domain_verification')} dir="ltr" placeholder='<meta name="facebook-domain-verification" content="…">' /></Field>
+    </Section>
     <Section title="الخرائط" collapsible defaultOpen={false}>
       <p className="hint">الافتراضي: OpenStreetMap مع النسب المطلوب. خوادم OSM العامة للاستخدام الخفيف فقط؛ عند ازدياد الزوار استخدم مزود خرائط بترخيص مناسب وضع رابطه هنا.</p>
       <Field label="رابط البلاطات"><Input value={v.map_tiles_url} onChange={set('map_tiles_url')} dir="ltr" /></Field>

@@ -8,7 +8,7 @@ import { findPlanLots, planLabel, hitTag, hitPlanCount, shapeText, searchPlanLot
 import { zoneAt, lotLabel, NKC_ZONES } from '@shared/nouakchottZones.js';
 import MapPicker from '../MapPicker.jsx';
 import { TYPES, DEALS, AVAILABILITY, FEATURES, SENT_RESPONSE } from '@shared/vocab.js';
-import { geoLabel, price, ago, propertyTitle, personLabel, shareText, fmtDate, waUrl, primaryPhone, toDateInput, fromDateInput, fillTemplate, locLabel } from '../fmt.js';
+import { geoLabel, price, ago, propertyTitle, personLabel, shareText, fmtDate, waUrl, primaryPhone, toDateInput, fromDateInput, fillTemplate, locLabel, channelText, SHARE_CHANNELS } from '../fmt.js';
 import { propertyDuplicates } from '@shared/search.js';
 import { matchRequestProperty, rankMatches, LEVEL_LABEL } from '@shared/matching.js';
 import { href, go, back } from '../router.js';
@@ -404,12 +404,17 @@ function ShareSheet({ p, onClose }) {
   const settings = useSettings();
   const tpls = useTable('templates').filter((t) => !t.archived_at && t.kind === 'property');
   const [tpl, setTpl] = useState(tpls[0]?.id);
-  const text = shareText(p, settings, tpls.find((t) => t.id === tpl)?.body);
+  const [channel, setChannel] = useState('wa');
+  const text = channelText(p, settings, tpls.find((t) => t.id === tpl)?.body, channel);
   const toast = useToast();
-  return <Sheet title="نص المشاركة" onClose={onClose} footer={<><Btn onClick={async () => { try { await navigator.clipboard.writeText(text); toast('نُسخ النص'); } catch { toast('انسخ النص يدوياً', 'err'); } }}>نسخ</Btn><LinkBtn kind="wa" icon="wa" href={`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noopener">مشاركة عبر واتساب</LinkBtn></>}>
+  const img = p.published ? `/og/${encodeURIComponent(p.ref)}.jpg` : '';
+  return <Sheet title="نص المشاركة" onClose={onClose} footer={<><Btn onClick={async () => { try { await navigator.clipboard.writeText(text); toast('نُسخ النص'); } catch { toast('انسخ النص يدوياً', 'err'); } }}>نسخ</Btn>{channel === 'wa' && <LinkBtn kind="wa" icon="wa" href={`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noopener">مشاركة عبر واتساب</LinkBtn>}{img && <LinkBtn icon="download" href={img} download={`${p.ref}.jpg`}>صورة الإعلان</LinkBtn>}</>}>
+    <div className="channel-seg"><Seg value={channel} onChange={setChannel} options={SHARE_CHANNELS} /></div>
     {tpls.length > 1 && <Field label="القالب"><Select value={tpl} onChange={setTpl} options={tpls.map((t) => [t.id, t.title])} /></Field>}
     <pre className="share-preview">{text}</pre>
-    <p className="hint">النص يحترم خيارات النشر: السعر ورقم القطعة والمعلم تظهر فقط إن سمحت بها، ولا يتضمن المالك أو المصدر أو ملاحظاتك.{!p.published && ' العرض غير منشور، لذا لا يوجد رابط.'}</p>
+    {img && <img className="og-preview" src={img} alt="صورة الإعلان كما تظهر في معاينة الرابط" loading="lazy" width="600" height="315" />}
+    <p className="hint">الرابط يحمل اسم المنصة ({channel})، فتظهر زيارات كل منصة في «الإحصاءات». صورة الإعلان هي ما يظهر عند لصق الرابط في واتساب وفيسبوك، ويمكن تنزيلها لنشرها في الحالة أو تيك توك.</p>
+    <p className="hint">النص يحترم خيارات النشر: السعر ورقم القطعة والمعلم تظهر فقط إن سمحت بها، ولا يتضمن المالك أو المصدر أو ملاحظاتك.{!p.published && ' العرض غير منشور، لذا لا يوجد رابط ولا صورة إعلان.'}</p>
   </Sheet>;
 }
 
