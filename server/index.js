@@ -2,7 +2,7 @@ import { openDatabases } from './db.js';
 import { createApp } from './app.js';
 import { config } from './config.js';
 import { db } from './db.js';
-import { createUser } from './auth.js';
+import { createUser, hashPassword } from './auth.js';
 
 // لاستضافة بلا سطر أوامر (نسخة المعاينة): ينشئ حساب المالك من متغيرات بيئة سرية إن لم يكن موجوداً.
 // كلمة المرور لا تُطبع أبداً، ولا تُخزَّن إلا مشفّرة.
@@ -17,8 +17,27 @@ function bootstrapUser(prefix, name, label) {
   console.log(`[bootstrap] أُنشئ ${label}`, email);
 }
 
+// حساب «النشر الآلي» الذي ينشر به Claude عروض المالك بطلبه. سرّه في البيئة فقط ويُضبط عند كل تشغيل،
+// فتغييره في Render يغيّر كلمة المرور وينهي الجلسات، وحذفه يعطّل الحساب.
+const BOT_NAME = 'النشر الآلي';
+function syncBotUser() {
+  const email = (process.env.WASIT_BOT_EMAIL || '').trim();
+  const password = process.env.WASIT_BOT_PASSWORD || '';
+  const d = db();
+  if (!email || password.length < 20) {
+    const off = d.prepare("SELECT id FROM users WHERE name = ? AND role != 'none'").all(BOT_NAME);
+    for (const u of off) { d.prepare("UPDATE users SET role = 'none' WHERE id = ?").run(u.id); d.prepare('DELETE FROM sessions WHERE user_id = ?').run(u.id); }
+    return;
+  }
+  const u = d.prepare('SELECT id FROM users WHERE email = ?').get(email);
+  if (!u) { createUser({ email, name: BOT_NAME, password, role: 'admin' }); console.log('[bootstrap] أُنشئ حساب النشر الآلي', email); return; }
+  d.prepare("UPDATE users SET password_hash = ?, role = 'admin', name = ? WHERE id = ?").run(hashPassword(password), BOT_NAME, u.id);
+  d.prepare('DELETE FROM sessions WHERE user_id = ?').run(u.id);
+}
+
 function bootstrapAdmin() {
   bootstrapUser('WASIT_ADMIN', 'المدير', 'حساب المالك');
+  syncBotUser();
   if (config.preview) bootstrapUser('WASIT_E2E', 'اختبار آلي', 'حساب الاختبار (معاينة فقط)');
   else removeTestUser();
 }
