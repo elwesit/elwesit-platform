@@ -62,6 +62,23 @@ function areaLinks(counts) {
   return `<section class="wrap areas-nav"><h2>تصفح حسب المقاطعة</h2><ul class="area-links">${items.map((a) => `<li><a href="${areaUrl(a)}">${e(a.name_ar)} <small>${formatNumber(counts[a.code].all)}</small></a></li>`).join('')}</ul></section>`;
 }
 
+// وصف الصفحة الرئيسية لمحركات البحث: اسم الموقع والمدينة ونوع العروض
+function homeDescription(s) {
+  return `${s.site_name} في نواكشوط: قطع أرضية ومنازل وشقق للبيع والإيجار في تفرغ زينة وبقية المقاطعات. تصفح العروض أو اعرض عقارك أو أرسل طلبك.`;
+}
+
+// بيانات منظمة: اسم الموقع وأسماؤه البديلة (فيظهر عند البحث عن «الوسيط»)، ونشاطه وحساباته على الشبكات
+function siteJsonLd(s, home) {
+  const sameAs = String(s.social_links || '').split(/\s+/).filter((u) => /^https:\/\/[^\s"<>]+$/.test(u));
+  const tel = normalizePhone(s.contact_whatsapp || s.contact_phone || '');
+  const data = [
+    { '@context': 'https://schema.org', '@type': 'WebSite', name: s.site_name, alternateName: ['الوسيط', 'Elwesit', 'elwesit.com'], url: home, inLanguage: 'ar' },
+    { '@context': 'https://schema.org', '@type': 'RealEstateAgent', name: s.site_name, alternateName: 'الوسيط', url: home, logo: home + 'static/og.png', image: home + 'static/og.png',
+      ...(tel ? { telephone: '+' + tel } : {}), areaServed: { '@type': 'City', name: 'نواكشوط' }, address: { '@type': 'PostalAddress', addressLocality: 'Nouakchott', addressCountry: 'MR' }, ...(sameAs.length ? { sameAs } : {}) },
+  ];
+  return `<script type="application/ld+json">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>`;
+}
+
 function baseUrl(req, s) {
   return (s.base_url || config.baseUrl || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
 }
@@ -152,7 +169,8 @@ export function publicRouter() {
   </div>
 </section>
 ${filtered ? '' : areaLinks(areaCounts())}`;
-    res.send(layout(s, { body, canonical: baseUrl(req, s) + '/', staff: isStaff(req.user), head: mapHead(s) }));
+    const home = baseUrl(req, s) + '/';
+    res.send(layout(s, { body, canonical: home, description: filtered ? '' : homeDescription(s), staff: isStaff(req.user), head: mapHead(s) + (filtered ? '' : siteJsonLd(s, home)) }));
   });
 
   r.get('/api/public/listings', (req, res) => {

@@ -58,6 +58,7 @@ function SiteSettings({ settings }) {
       <p className="hint">لإثبات ملكية الموقع في Google Search Console أو Facebook Business: اختر طريقة «وسم HTML» (HTML tag)، وانسخ الوسم كاملاً أو الرمز وحده والصقه هنا، ثم احفظ واضغط «تحقق» هناك.</p>
       <Field label="Google Search Console"><Input value={v.google_site_verification} onChange={set('google_site_verification')} dir="ltr" placeholder='<meta name="google-site-verification" content="…">' /></Field>
       <Field label="Facebook (التحقق من النطاق)"><Input value={v.facebook_domain_verification} onChange={set('facebook_domain_verification')} dir="ltr" placeholder='<meta name="facebook-domain-verification" content="…">' /></Field>
+      <Field label="صفحات الموقع على الشبكات (رابط في كل سطر)" hint="فيسبوك وتيك توك وغيرها؛ تساعد Google على ربطها باسم الموقع"><TextArea value={v.social_links} onChange={set('social_links')} dir="ltr" rows={3} /></Field>
     </Section>
     <Section title="الخرائط" collapsible defaultOpen={false}>
       <p className="hint">الافتراضي: OpenStreetMap مع النسب المطلوب. خوادم OSM العامة للاستخدام الخفيف فقط؛ عند ازدياد الزوار استخدم مزود خرائط بترخيص مناسب وضع رابطه هنا.</p>
