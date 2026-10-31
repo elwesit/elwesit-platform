@@ -3,6 +3,7 @@ import { createApp } from './app.js';
 import { config } from './config.js';
 import { db } from './db.js';
 import { createUser, hashPassword } from './auth.js';
+import { importRepoListings } from './repo-listings.js';
 
 // لاستضافة بلا سطر أوامر (نسخة المعاينة): ينشئ حساب المالك من متغيرات بيئة سرية إن لم يكن موجوداً.
 // كلمة المرور لا تُطبع أبداً، ولا تُخزَّن إلا مشفّرة.
@@ -54,6 +55,7 @@ function removeTestUser() {
 
 openDatabases();
 bootstrapAdmin();
+importRepoListings().catch((e) => console.error('[repo-listings]', e.message));
 const app = createApp();
 const server = app.listen(config.port, config.host, () => {
   console.log(`الوسيط العقاري يعمل على http://${config.host}:${config.port}`);
