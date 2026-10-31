@@ -26,6 +26,8 @@ export const DEFAULT_SETTINGS = {
   // رموز التحقق من ملكية الموقع (Google Search Console وFacebook Business) — تُضاف كوسوم meta
   google_site_verification: '',
   facebook_domain_verification: '',
+  // حسابات الموقع على الشبكات (رابط في كل سطر)، تُعرض لمحركات البحث حتى تربطها باسم الموقع
+  social_links: 'https://www.facebook.com/433987593121741\nhttps://www.tiktok.com/@telephone26463808',
 };
 
 export const DEFAULT_TEMPLATES = [

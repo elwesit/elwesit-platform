@@ -145,3 +145,15 @@ test('سحب النشر يحذف صورة المشاركة', async () => {
   const cache = path.join(dir, 'og-cache');
   assert.ok(!fs.existsSync(cache) || !fs.readdirSync(cache).some((f) => f.startsWith(listing.ref + '-')));
 });
+
+test('الصفحة الرئيسية: بيانات منظمة باسم الموقع وأسمائه البديلة وحساباته، ووصف يذكر نواكشوط', async () => {
+  const home = (await client().req('GET', '/')).body;
+  assert.match(home, /<meta name="description" content="الوسيط العقاري في نواكشوط/);
+  const ld = JSON.parse(home.match(/<script type="application\/ld\+json">([^<]+)<\/script>/)[1]);
+  assert.equal(ld[0]['@type'], 'WebSite');
+  assert.ok(ld[0].alternateName.includes('الوسيط'));
+  assert.equal(ld[1]['@type'], 'RealEstateAgent');
+  assert.ok(ld[1].sameAs.some((u) => u.includes('facebook.com')));
+  assert.equal(ld[1].telephone, '+22226463808');
+  assert.ok(!(await client().req('GET', '/?deal=rent')).body.includes('ld+json'), 'نتائج البحث بلا بيانات الموقع');
+});
