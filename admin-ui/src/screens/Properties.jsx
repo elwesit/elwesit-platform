@@ -455,7 +455,7 @@ function PlanMap({ initialQ }) {
       layer = L.layerGroup().addTo(map);
       const markers = {};
       for (const p of placed) {
-        const mk = L.marker([p.lat, p.lng], { icon: pinIcon(L, p.availability === 'available' ? '#0e5a4c' : '#8a8f8d') }).addTo(layer).on('click', () => go('properties/' + p.id));
+        const mk = L.marker([p.lat, p.lng], { icon: pinIcon(L, p.availability === 'available' ? '#187f29' : '#8a8f8d') }).addTo(layer).on('click', () => go('properties/' + p.id));
         const lbl = p.lot_number ? `${p.lot_number}${p.sector ? ' / ' + p.sector : ''}` : p.ref;
         mk.bindTooltip(lbl, { permanent: true, direction: 'top', offset: [0, -28], className: 'lot-label' });
         markers[p.id] = mk;

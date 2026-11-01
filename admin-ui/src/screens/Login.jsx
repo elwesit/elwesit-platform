@@ -24,7 +24,7 @@ export default function Login() {
   };
   return <div className="login">
     <form className="login-card" onSubmit={submit}>
-      <img src="/static/icon.svg" alt="" width="52" />
+      <img src="/static/logo-mark.svg" alt="" width="72" />
       <h1>{mode === 'login' ? 'مساحة العمل' : 'استعادة الوصول'}</h1>
       <p className="muted">{mode === 'login' ? 'هذه الصفحة خاصة بإدارة الوسيط. الزوار يمكنهم تصفح العقارات من الموقع العام.' : 'أدخل بريدك وأحد رموز الاستعادة التي حصلت عليها عند إنشاء الحساب، ثم اختر كلمة مرور جديدة.'}</p>
       <Field label="البريد الإلكتروني"><Input type="email" value={email} onChange={setEmail} autoComplete="username" required dir="ltr" /></Field>

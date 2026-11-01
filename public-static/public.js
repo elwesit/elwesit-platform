@@ -5,6 +5,17 @@
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
   const mapCfg = (() => { try { return JSON.parse($('meta[name="wasit-map"]')?.content || '{}'); } catch { return {}; } })();
 
+  // البحث المطوي على الهاتف: تغيير «للبيع/للإيجار» يبحث مباشرة، وزر «فلترة» يعمل بلوحة المفاتيح
+  const sf = $('#search-form'), sfToggle = $('#sf-toggle'), sfBtn = $('.sf-btn');
+  if (sf && sfToggle && sfBtn) {
+    sf.addEventListener('change', (ev) => {
+      if (ev.target.name === 'deal' && !sfToggle.checked && getComputedStyle(sfBtn).display !== 'none') sf.submit();
+    });
+    sfBtn.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); sfToggle.click(); } });
+    const sync = () => sfBtn.setAttribute('aria-expanded', sfToggle.checked);
+    sfToggle.addEventListener('change', sync); sync();
+  }
+
   function toast(msg) {
     const t = document.createElement('div');
     t.className = 'toast'; t.textContent = msg; t.setAttribute('role', 'status');
@@ -31,7 +42,7 @@
     return m;
   }
   window.wasitMap = { loadLeaflet, baseMap };
-  const pinIcon = () => window.L.divIcon({ className: 'wpin', html: '<svg viewBox="0 0 24 24" width="30" height="30"><path fill="#0e5a4c" stroke="#fff" stroke-width="1.5" d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7z"/><circle cx="12" cy="9" r="2.6" fill="#fff"/></svg>', iconSize: [30, 30], iconAnchor: [15, 29], popupAnchor: [0, -26] });
+  const pinIcon = () => window.L.divIcon({ className: 'wpin', html: '<svg viewBox="0 0 24 24" width="30" height="30"><path fill="#187f29" stroke="#fff" stroke-width="1.5" d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7z"/><circle cx="12" cy="9" r="2.6" fill="#fff"/></svg>', iconSize: [30, 30], iconAnchor: [15, 29], popupAnchor: [0, -26] });
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   // ---------- صفحة النتائج ----------
@@ -99,7 +110,7 @@
         const c = window.L.circle([lat, lng], { radius: +pmap.dataset.radius || 500, color: '#b57d21', weight: 2, fillOpacity: 0.15 }).addTo(m).bindTooltip('موقع تقريبي', { permanent: true, direction: 'center' });
         m.fitBounds(c.getBounds());
       } else window.L.marker([lat, lng], { icon: pinIcon() }).addTo(m);
-      if (pmap.dataset.boundary) { try { window.L.geoJSON(JSON.parse(pmap.dataset.boundary), { style: { color: '#0e5a4c', weight: 2, fillOpacity: 0.1 } }).addTo(m); } catch {} }
+      if (pmap.dataset.boundary) { try { window.L.geoJSON(JSON.parse(pmap.dataset.boundary), { style: { color: '#187f29', weight: 2, fillOpacity: 0.1 } }).addTo(m); } catch {} }
     });
   }
 

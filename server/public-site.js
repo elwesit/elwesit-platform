@@ -74,7 +74,7 @@ function siteJsonLd(s, home) {
   const tel = normalizePhone(s.contact_whatsapp || s.contact_phone || '');
   const data = [
     { '@context': 'https://schema.org', '@type': 'WebSite', name: s.site_name, alternateName: ['الوسيط', 'Elwesit', 'elwesit.com'], url: home, inLanguage: 'ar' },
-    { '@context': 'https://schema.org', '@type': 'RealEstateAgent', name: s.site_name, alternateName: 'الوسيط', url: home, logo: home + 'static/og.png', image: home + 'static/og.png',
+    { '@context': 'https://schema.org', '@type': 'RealEstateAgent', name: s.site_name, alternateName: 'الوسيط', url: home, logo: home + 'static/logo.png', image: home + 'static/og.png',
       ...(tel ? { telephone: '+' + tel } : {}), areaServed: { '@type': 'City', name: 'نواكشوط' }, address: { '@type': 'PostalAddress', addressLocality: 'Nouakchott', addressCountry: 'MR' }, ...(sameAs.length ? { sameAs } : {}) },
   ];
   return `<script type="application/ld+json">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>`;

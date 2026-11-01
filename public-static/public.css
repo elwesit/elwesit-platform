@@ -1,22 +1,29 @@
 :root {
-  --bg: #faf7f1;
+  /* ألوان الهوية: أخضر شعار «الوسيط العقاري» (#2cb33b) وبرتقالي حرف E */
+  --bg: #f5f9f5;
   --surface: #ffffff;
-  --ink: #1d2623;
-  --muted: #5e6b66;
-  --line: #e6e0d4;
-  --brand: #0e5a4c;
+  --ink: #1c2a20;
+  --muted: #5b6760;
+  --line: #dde7de;
+  --brand: #187f29;
+  --brand-bright: #2cb33b;
+  --brand-dark: #10601d;
   --brand-ink: #ffffff;
-  --brand-soft: #e3efeb;
-  --sand: #f3e7cf;
-  --accent: #b57d21;
+  --brand-soft: #e5f4e7;
+  --sand: #eaf5eb;
+  --accent: #e8873f;
+  --accent-ink: #b0560f;
   --wa: #128c4b;
   --rent: #2f5d8a;
   --danger: #a33a2b;
   --ok: #1f7a4a;
   --radius: 12px;
-  --shadow: 0 1px 2px rgba(20, 30, 25, .06), 0 4px 14px rgba(20, 30, 25, .06);
+  --shadow: 0 1px 2px rgba(16, 60, 25, .06), 0 4px 14px rgba(16, 60, 25, .07);
   --font: "SF Arabic", "Noto Sans Arabic", "Segoe UI", "Geeza Pro", Tahoma, system-ui, sans-serif;
+  --font-brand: "Cairo", var(--font);
 }
+/* خط الشعار (Cairo، رخصة OFL) مستضاف على الموقع نفسه: بلا طلبات لجهات خارجية */
+@font-face { font-family: "Cairo"; src: url("/static/fonts/Cairo-Bold.ttf") format("truetype"); font-weight: 600 900; font-display: swap; }
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; font-family: var(--font); background: var(--bg); color: var(--ink); line-height: 1.65; font-size: 16px; }
@@ -25,18 +32,21 @@ img { max-width: 100%; display: block; }
 svg:not(.leaflet-zoom-animated) { width: 1.15em; height: 1.15em; fill: currentColor; flex: none; }
 .wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
 .narrow { max-width: 680px; }
-h1, h2, h3 { line-height: 1.35; margin: 0 0 .5em; }
+h1, h2, h3 { line-height: 1.35; margin: 0 0 .5em; font-family: var(--font-brand); font-weight: 700; }
 .muted { color: var(--muted); }
 .hint { color: var(--muted); font-size: .88rem; }
 
-.staffbar { background: #1d2623; color: #fff; font-size: .88rem; display: flex; gap: 12px; justify-content: center; align-items: center; padding: 6px 12px; flex-wrap: wrap; }
+.staffbar { background: #0f3a18; color: #fff; font-size: .88rem; display: flex; gap: 12px; justify-content: center; align-items: center; padding: 6px 12px; flex-wrap: wrap; }
 .staffbar a { color: var(--sand); font-weight: 700; }
 
-.site-header { background: var(--surface); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 20; }
+.site-header { background: var(--surface); border-bottom: 1px solid var(--line); border-top: 4px solid var(--brand-bright); position: sticky; top: 0; z-index: 20; }
 .header-row { display: flex; align-items: center; gap: 16px; min-height: 64px; }
 .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); }
-.brand span { display: flex; flex-direction: column; line-height: 1.25; }
-.brand small { color: var(--muted); font-size: .76rem; }
+.brand img { width: 46px; height: 46px; }
+.brand span { display: flex; flex-direction: column; line-height: 1.2; }
+.brand strong { font-family: var(--font-brand); font-weight: 700; color: var(--brand-bright); font-size: 1.32rem; letter-spacing: 0; }
+.brand small { color: #6b6e75; font-size: .66rem; font-weight: 700; letter-spacing: .06em; direction: ltr; text-align: right; font-family: system-ui, "Segoe UI", Arial, sans-serif; }
+.brand small b { color: var(--accent); }
 .main-nav { display: flex; gap: 4px; margin-inline-start: auto; }
 .main-nav a { text-decoration: none; color: var(--ink); padding: 8px 12px; border-radius: 8px; }
 .main-nav a:hover { background: var(--brand-soft); }
@@ -45,7 +55,7 @@ h1, h2, h3 { line-height: 1.35; margin: 0 0 .5em; }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid transparent; border-radius: 10px; padding: 10px 18px; font: inherit; font-weight: 600; cursor: pointer; text-decoration: none; min-height: 44px; transition: background .15s, border-color .15s; }
 .btn-sm { padding: 6px 12px; min-height: 38px; font-size: .92rem; }
 .btn-primary { background: var(--brand); color: var(--brand-ink); }
-.btn-primary:hover { background: #0b4a3e; }
+.btn-primary:hover { background: var(--brand-dark); }
 .btn-wa { background: var(--wa); color: #fff; }
 .btn-outline { background: var(--surface); border-color: var(--line); color: var(--ink); }
 .btn-outline:hover { border-color: var(--brand); }
@@ -53,7 +63,14 @@ h1, h2, h3 { line-height: 1.35; margin: 0 0 .5em; }
 .btn-block { width: 100%; }
 .btn[disabled] { opacity: .6; cursor: progress; }
 
-.hero { background: linear-gradient(180deg, var(--sand), var(--bg)); padding: 32px 0 24px; }
+/* خلفية الواجهة: تدرج أخضر خفيف مع شبكة قطع باهتة كما في خلفية الشعار */
+.hero { background:
+    linear-gradient(180deg, rgba(234,245,235,.6), var(--bg)),
+    repeating-linear-gradient(0deg, transparent 0 46px, rgba(44,179,59,.09) 46px 48px),
+    repeating-linear-gradient(90deg, transparent 0 70px, rgba(44,179,59,.09) 70px 72px),
+    var(--sand);
+  padding: 32px 0 24px; border-bottom: 1px solid var(--line); }
+.hero h1 { color: var(--brand); }
 .hero h1 { font-size: clamp(1.5rem, 3.6vw, 2.2rem); }
 .lead { color: var(--muted); font-size: 1.05rem; margin-top: 0; }
 .hero-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
@@ -65,6 +82,9 @@ h1, h2, h3 { line-height: 1.35; margin: 0 0 .5em; }
 .seg span { display: block; padding: 6px 16px; border-radius: 8px; }
 .seg input:checked + span { background: var(--brand); color: #fff; }
 .seg input:focus-visible + span { outline: 2px solid var(--accent); }
+.sf-top { display: flex; gap: 8px; align-items: center; }
+.sf-btn { display: none; }
+.sf-body { display: grid; gap: 12px; }
 .fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .f { display: flex; flex-direction: column; gap: 4px; font-size: .92rem; min-width: 0; }
 .f > span:first-child, .f legend { color: var(--muted); font-weight: 600; }
@@ -108,7 +128,7 @@ fieldset.inline label { display: flex; align-items: center; gap: 6px; min-height
 .card-meta { display: flex; gap: 12px; flex-wrap: wrap; font-size: .88rem; margin: 6px 0; color: var(--ink); }
 .card-meta span { display: inline-flex; align-items: center; gap: 4px; }
 .card-price { display: flex; flex-direction: column; margin-top: 6px; }
-.card-price strong { color: var(--brand); font-size: 1.08rem; }
+.card-price strong { color: var(--brand); font-size: 1.08rem; font-family: var(--font-brand); }
 .card-price small, .price-box small { color: var(--muted); }
 .card-actions { padding: 0 14px 14px; }
 
@@ -124,7 +144,7 @@ fieldset.inline label { display: flex; align-items: center; gap: 6px; min-height
 .ask-dlg .ask-fields { gap: 12px; }
 .ask-dlg [hidden] { display: none !important; }
 .ask-dlg .hint { margin: 0; font-size: .85rem; color: var(--muted); }
-.hidden-price strong { color: var(--accent); }
+.hidden-price strong { color: var(--accent-ink); }
 .empty { text-align: center; padding: 40px 16px; background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius); }
 .more-wrap { text-align: center; margin-top: 20px; }
 
@@ -148,7 +168,7 @@ fieldset.inline label { display: flex; align-items: center; gap: 6px; min-height
 .place { display: flex; gap: 6px; align-items: center; color: var(--muted); margin: 0 0 12px; }
 .tag { display: inline-block; border: 1px solid var(--line); border-radius: 999px; padding: 1px 10px; font-size: .82rem; margin-inline-start: 6px; background: var(--surface); }
 .price-box { background: var(--brand-soft); border-radius: var(--radius); padding: 12px 16px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
-.price-box strong { font-size: 1.35rem; color: var(--brand); }
+.price-box strong { font-size: 1.35rem; color: var(--brand); font-family: var(--font-brand); }
 .facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 18px 0; }
 .facts div { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
 .facts dt { color: var(--muted); font-size: .82rem; }
@@ -179,14 +199,17 @@ fieldset.inline label { display: flex; align-items: center; gap: 6px; min-height
 .ok-page h1 { color: var(--ok); }
 .prose h2 { font-size: 1.15rem; margin-top: 1.4em; }
 
-.site-footer { background: #17201d; color: #d8dfdb; padding: 28px 0 16px; margin-top: 24px; }
-.site-footer a { color: #f3e7cf; }
+.site-footer { background: #0f3a18; color: #d9e8dc; padding: 28px 0 16px; margin-top: 24px; border-top: 4px solid var(--brand-bright); }
+.site-footer a { color: #b8f0c0; }
+.footer-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.footer-brand img { width: 52px; height: 52px; background: #fff; border-radius: 50%; padding: 4px; }
+.footer-brand strong { font-family: var(--font-brand); font-size: 1.25rem; color: #fff; }
 .footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 20px; }
 .footer-grid nav { display: flex; flex-direction: column; gap: 4px; }
 .footer-grid p { margin: 0 0 4px; }
-.footnote { font-size: .8rem; color: #a5b1ab; border-top: 1px solid #2c3833; margin-top: 18px; padding-top: 12px; }
+.footnote { font-size: .8rem; color: #a3bfa8; border-top: 1px solid #275232; margin-top: 18px; padding-top: 12px; }
 
-.toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: #1d2623; color: #fff; padding: 10px 16px; border-radius: 10px; z-index: 50; }
+.toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: #0f3a18; color: #fff; padding: 10px 16px; border-radius: 10px; z-index: 50; }
 
 @media (max-width: 900px) {
   .property-grid { grid-template-columns: 1fr; }
@@ -203,13 +226,24 @@ fieldset.inline label { display: flex; align-items: center; gap: 6px; min-height
   .header-contact { margin-inline-start: auto; }
   .header-contact .btn span { display: none; }
   .header-contact .btn { padding: 6px 10px; }
-  .brand small { display: none; }
+  .brand img { width: 40px; height: 40px; }
+  .brand strong { font-size: 1.15rem; }
+  .brand small { font-size: .58rem; }
   .fields { grid-template-columns: 1fr; }
   .map { height: 62vh; }
-  .hero { padding: 18px 0 14px; }
+  .hero { padding: 12px 0; }
   .grid { grid-template-columns: 1fr; }
-  .seg { width: 100%; }
+  .seg { width: auto; flex: 1; }
   .seg label { flex: 1; text-align: center; }
+  .seg span { padding: 6px 8px; }
+  /* الهاتف: البحث سطر واحد (العملية + زر الفلترة) والحقول تُفتح عند الطلب، لتظهر العروض من أول شاشة */
+  .search { padding: 10px; gap: 10px; border-radius: 14px; }
+  .sf-btn { display: inline-flex; min-height: 40px; padding: 6px 14px; }
+  .sf-toggle:checked ~ .sf-top .sf-btn { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); }
+  .sf-toggle:not(:checked) ~ .sf-body { display: none; }
+  .hero h1 { font-size: 1.2rem; margin-bottom: 8px; }
+  .hero .lead, .hero .hero-actions { display: none; }
+  .results { padding-top: 14px; }
   /* شريط تواصل ثابت في صفحة العقار على الهاتف */
   .property-side .contact-actions { position: fixed; bottom: 0; left: 0; right: 0; z-index: 30; background: var(--surface); border-top: 1px solid var(--line); padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr) auto; }
   .property-side .share-btn span { display: none; }
