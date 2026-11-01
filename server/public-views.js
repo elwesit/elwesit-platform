@@ -181,12 +181,19 @@ export function searchForm(geo, q, { compact = false } = {}) {
   const opt = (v, label, cur) => `<option value="${e(v)}"${String(cur || '') === String(v) ? ' selected' : ''}>${e(label)}</option>`;
   const locOptions = geo.wilayas.map((w) => `<optgroup label="${e(w.name_ar)}">${opt('w:' + w.code, 'كل ' + w.name_ar, q.loc)}${geo.moughataas.filter((m) => m.wilaya_code === w.code).map((m) => opt('m:' + m.code, m.name_ar, q.loc)).join('')}</optgroup>`).join('');
   const more = q.area_min || q.bedrooms || q.q;
+  // على الهاتف تُطوى حقول البحث خلف زر «فلترة» حتى تظهر العروض من أول شاشة (بلا جافاسكربت: مربع اختيار مخفي)
+  const filtered = q.type || q.loc || q.max || more;
   return `<form class="search${compact ? ' compact' : ''}" action="/" method="get" role="search" id="search-form">
+  <input type="checkbox" class="sf-toggle" id="sf-toggle"${filtered ? ' checked' : ''} hidden>
+  <div class="sf-top">
   <div class="seg" role="radiogroup" aria-label="نوع العملية">
     <label><input type="radio" name="deal" value=""${!q.deal ? ' checked' : ''}><span>الكل</span></label>
     <label><input type="radio" name="deal" value="sale"${q.deal === 'sale' ? ' checked' : ''}><span>للبيع</span></label>
     <label><input type="radio" name="deal" value="rent"${q.deal === 'rent' ? ' checked' : ''}><span>للإيجار</span></label>
   </div>
+  <label class="btn btn-outline sf-btn" for="sf-toggle" aria-controls="sf-body" role="button" tabindex="0"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg><span>فلترة</span></label>
+  </div>
+  <div class="sf-body" id="sf-body">
   <div class="fields">
     <label class="f"><span>نوع العقار</span><select name="type">${opt('', 'كل الأنواع', q.type)}${Object.entries(TYPES).map(([k, v]) => opt(k, v, q.type)).join('')}</select></label>
     <label class="f"><span>الموقع</span><select name="loc">${opt('', 'كل موريتانيا', q.loc)}${locOptions}</select></label>
@@ -201,6 +208,7 @@ export function searchForm(geo, q, { compact = false } = {}) {
   </details>
   <input type="hidden" name="view" value="${e(q.view || 'list')}">
   <button class="btn btn-primary" type="submit">ابحث</button>
+  </div>
 </form>`;
 }
 

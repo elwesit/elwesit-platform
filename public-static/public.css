@@ -82,6 +82,9 @@ h1, h2, h3 { line-height: 1.35; margin: 0 0 .5em; font-family: var(--font-brand)
 .seg span { display: block; padding: 6px 16px; border-radius: 8px; }
 .seg input:checked + span { background: var(--brand); color: #fff; }
 .seg input:focus-visible + span { outline: 2px solid var(--accent); }
+.sf-top { display: flex; gap: 8px; align-items: center; }
+.sf-btn { display: none; }
+.sf-body { display: grid; gap: 12px; }
 .fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .f { display: flex; flex-direction: column; gap: 4px; font-size: .92rem; min-width: 0; }
 .f > span:first-child, .f legend { color: var(--muted); font-weight: 600; }
@@ -228,10 +231,19 @@ fieldset.inline label { display: flex; align-items: center; gap: 6px; min-height
   .brand small { font-size: .58rem; }
   .fields { grid-template-columns: 1fr; }
   .map { height: 62vh; }
-  .hero { padding: 18px 0 14px; }
+  .hero { padding: 12px 0; }
   .grid { grid-template-columns: 1fr; }
-  .seg { width: 100%; }
+  .seg { width: auto; flex: 1; }
   .seg label { flex: 1; text-align: center; }
+  .seg span { padding: 6px 8px; }
+  /* الهاتف: البحث سطر واحد (العملية + زر الفلترة) والحقول تُفتح عند الطلب، لتظهر العروض من أول شاشة */
+  .search { padding: 10px; gap: 10px; border-radius: 14px; }
+  .sf-btn { display: inline-flex; min-height: 40px; padding: 6px 14px; }
+  .sf-toggle:checked ~ .sf-top .sf-btn { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); }
+  .sf-toggle:not(:checked) ~ .sf-body { display: none; }
+  .hero h1 { font-size: 1.2rem; margin-bottom: 8px; }
+  .hero .lead, .hero .hero-actions { display: none; }
+  .results { padding-top: 14px; }
   /* شريط تواصل ثابت في صفحة العقار على الهاتف */
   .property-side .contact-actions { position: fixed; bottom: 0; left: 0; right: 0; z-index: 30; background: var(--surface); border-top: 1px solid var(--line); padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr) auto; }
   .property-side .share-btn span { display: none; }

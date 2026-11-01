@@ -5,6 +5,17 @@
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
   const mapCfg = (() => { try { return JSON.parse($('meta[name="wasit-map"]')?.content || '{}'); } catch { return {}; } })();
 
+  // البحث المطوي على الهاتف: تغيير «للبيع/للإيجار» يبحث مباشرة، وزر «فلترة» يعمل بلوحة المفاتيح
+  const sf = $('#search-form'), sfToggle = $('#sf-toggle'), sfBtn = $('.sf-btn');
+  if (sf && sfToggle && sfBtn) {
+    sf.addEventListener('change', (ev) => {
+      if (ev.target.name === 'deal' && !sfToggle.checked && getComputedStyle(sfBtn).display !== 'none') sf.submit();
+    });
+    sfBtn.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); sfToggle.click(); } });
+    const sync = () => sfBtn.setAttribute('aria-expanded', sfToggle.checked);
+    sfToggle.addEventListener('change', sync); sync();
+  }
+
   function toast(msg) {
     const t = document.createElement('div');
     t.className = 'toast'; t.textContent = msg; t.setAttribute('role', 'status');
