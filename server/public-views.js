@@ -5,6 +5,7 @@ import { formatAmountWords, formatNumber, PRICE_BASIS } from '../shared/money.js
 import { displayPhone, normalizePhone } from '../shared/phone.js';
 import { config } from './config.js';
 import { listingFacts, inquiryMessage } from '../shared/inquiry.js';
+import { activeUrgent, urgentMessage } from '../shared/urgent.js';
 
 export function priceText(l) {
   if (l.price_hidden || l.price_amount == null) return { main: 'السعر عند التواصل', alt: '' };
@@ -64,6 +65,7 @@ ${head}
 ${config.preview ? '<div class="preview-bar" role="note">نسخة تجريبية للمعاينة — ليست الموقع الرسمي، والعروض فيها للاختبار فقط.</div>' : ''}
 ${staff ? `<div class="staffbar"><span>أنت مسجّل كمدير. هذه هي الصفحة كما يراها الزوار.</span><a href="/admin/">مساحة العمل ←</a></div>` : ''}
 <header class="site-header">
+${urgentBar(site, wa)}
   <div class="wrap header-row">
     <a class="brand" href="/"><img src="/static/icon.svg" alt="" width="34" height="34"><span><strong>${e(site.site_name)}</strong><small>${e(site.site_tagline)}</small></span></a>
     <nav class="main-nav" aria-label="القائمة الرئيسية">
@@ -107,6 +109,29 @@ ${body}
 <script src="/static/public.js?v=${site.__v}" defer></script>
 </body>
 </html>`;
+}
+
+// رابط واتساب برسالة جاهزة تذكر الطلب العاجل
+export function urgentHref(r, site, wa) {
+  return wa ? `https://wa.me/${wa}?text=${encodeURIComponent(urgentMessage(r.text, site.site_name))}` : '/urgent';
+}
+
+// شريط «طلب عاجل» المتحرك (ثابت مع رأس الصفحة). تُكرَّر الطلبات حتى يملأ الشريط الشاشة،
+// والنسخ المكررة مخفية عن قارئات الشاشة ولوحة المفاتيح. يتوقف عند المرور أو التركيز أو بزر الإيقاف،
+// ولا يتحرك أبداً لمن فعّل «تقليل الحركة» (يصير شريطاً يُسحب باليد).
+export function urgentBar(site, wa) {
+  const items = activeUrgent(site.urgent_requests);
+  if (!items.length) return '';
+  const seq = [];
+  let chars = 0;
+  while (chars < 260 || !seq.length) for (const r of items) { seq.push({ r, copy: seq.length >= items.length }); chars += r.text.length + 16; }
+  const one = ({ r, copy }, hidden) => `<a class="urgent-item${copy ? ' urgent-copy' : ''}" href="${e(urgentHref(r, site, wa))}" rel="noopener"${hidden || copy ? ' tabindex="-1" aria-hidden="true"' : ''}>${icon.wa}<span>${e(r.text)}</span><b>عندي المطلوب</b></a>`;
+  const dur = Math.min(240, Math.max(18, Math.round(chars * 0.14)));
+  return `<div class="urgent-bar" role="region" aria-label="طلبات عاجلة">
+  <a class="urgent-label" href="/urgent"><span class="urgent-dot" aria-hidden="true"></span>طلب عاجل</a>
+  <div class="urgent-viewport"><div class="urgent-track" style="--urgent-dur:${dur}s"><div class="urgent-set">${seq.map((x) => one(x)).join('')}</div><div class="urgent-set urgent-dup" aria-hidden="true">${seq.map((x) => one(x, true)).join('')}</div></div></div>
+  <button type="button" class="urgent-pause" aria-pressed="false" aria-label="إيقاف حركة الشريط" title="إيقاف الحركة"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="i-pause" d="M7 5h4v14H7zm6 0h4v14h-4z"/><path class="i-play" d="M8 5v14l11-7z"/></svg></button>
+</div>`;
 }
 
 export function priceLine(l) {
