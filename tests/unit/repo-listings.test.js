@@ -38,3 +38,18 @@ test('العرض الذي سحبه المالك لا يُعاد نشره', async
   await importRepoListings(src);
   assert.equal(db().prepare('SELECT published FROM properties WHERE id = ?').get(id).published, 0);
 });
+
+test('تعديل المجلد يُطبَّق مرة واحدة على العرض المنشور وصوره', async () => {
+  const id = listingId('iskan1-400');
+  db().prepare('UPDATE properties SET published = 1 WHERE id = ?').run(id);
+  const spec = path.join(src, 'iskan1-400', 'listing.json');
+  fs.writeFileSync(spec, JSON.stringify({ ...JSON.parse(fs.readFileSync(spec, 'utf8')), pub_title: 'قطعة 400 م² قرب كرفور' }));
+  await sharp({ create: { width: 64, height: 48, channels: 3, background: '#b5481f' } }).jpeg().toFile(path.join(src, 'iskan1-400', '1.jpg'));
+  const done = await importRepoListings(src);
+  assert.equal(done.length, 1);
+  assert.equal(done[0].updated, true);
+  const p = db().prepare('SELECT * FROM properties WHERE id = ?').get(id);
+  assert.equal(p.pub_title, 'قطعة 400 م² قرب كرفور');
+  assert.equal(publicReadDb().prepare('SELECT title FROM listings WHERE ref = ?').get(p.ref).title, 'قطعة 400 م² قرب كرفور');
+  assert.equal((await importRepoListings(src)).length, 0, 'لا يُعاد التطبيق دون تغيير');
+});
