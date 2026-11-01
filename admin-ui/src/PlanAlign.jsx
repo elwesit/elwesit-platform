@@ -77,7 +77,7 @@ export default function PlanAlign({ file, onDone, onClose }) {
       const h = s.canvas.height;
       imgPts.forEach((p, i) => L.marker([h - p[1], p[0]], { icon: ptIcon(L, i, '#b5179e'), draggable: true }).addTo(s.layer).on('dragend', (e) => { const q = e.target.getLatLng(); setImgPts((a) => a.map((x, j) => (j === i ? [q.lng, h - q.lat] : x))); }));
     } else {
-      geoPts.forEach((p, i) => L.marker(p, { icon: ptIcon(L, i, '#0e5a4c'), draggable: step === 'map' }).addTo(s.layer).on('dragend', (e) => { const q = e.target.getLatLng(); setGeoPts((a) => a.map((x, j) => (j === i ? [q.lat, q.lng] : x))); }));
+      geoPts.forEach((p, i) => L.marker(p, { icon: ptIcon(L, i, '#187f29'), draggable: step === 'map' }).addTo(s.layer).on('dragend', (e) => { const q = e.target.getLatLng(); setGeoPts((a) => a.map((x, j) => (j === i ? [q.lat, q.lng] : x))); }));
     }
   }, [step, result, imgPts, geoPts]); // eslint-disable-line
 

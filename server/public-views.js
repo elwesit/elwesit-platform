@@ -52,11 +52,13 @@ ${canonical ? `<link rel="canonical" href="${e(canonical)}">` : ''}
 <meta property="og:description" content="${e(description || site.site_tagline)}">
 ${canonical ? `<meta property="og:url" content="${e(canonical)}">` : ''}
 ${ogImage ? `<meta property="og:image" content="${e(typeof ogImage === 'string' ? ogImage : ogImage.url)}">${ogImage.width ? `<meta property="og:image:width" content="${ogImage.width}"><meta property="og:image:height" content="${ogImage.height}">` : ''}<meta name="twitter:card" content="summary_large_image">` : ''}
-<meta name="theme-color" content="#0e5a4c">
+<meta name="theme-color" content="#2cb33b">
 ${config.preview ? '<meta name="robots" content="noindex, nofollow">' : noindex ? '<meta name="robots" content="noindex, follow">' : ''}
 ${verificationToken(site.google_site_verification) ? `<meta name="google-site-verification" content="${e(verificationToken(site.google_site_verification))}">` : ''}
 ${verificationToken(site.facebook_domain_verification) ? `<meta name="facebook-domain-verification" content="${e(verificationToken(site.facebook_domain_verification))}">` : ''}
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/icon-180.png">
+<link rel="preload" href="/static/fonts/Cairo-Bold.ttf" as="font" type="font/ttf" crossorigin>
 <link rel="stylesheet" href="/static/public.css?v=${site.__v}">
 ${head}
 </head>
@@ -65,7 +67,7 @@ ${config.preview ? '<div class="preview-bar" role="note">نسخة تجريبية
 ${staff ? `<div class="staffbar"><span>أنت مسجّل كمدير. هذه هي الصفحة كما يراها الزوار.</span><a href="/admin/">مساحة العمل ←</a></div>` : ''}
 <header class="site-header">
   <div class="wrap header-row">
-    <a class="brand" href="/"><img src="/static/icon.svg" alt="" width="34" height="34"><span><strong>${e(site.site_name)}</strong><small>${e(site.site_tagline)}</small></span></a>
+    <a class="brand" href="/" title="${e(site.site_tagline)}"><img src="/static/logo-mark.svg" alt="" width="46" height="46"><span><strong>${e(site.site_name)}</strong><small lang="fr"><b>E</b>LWESITE IMMOBILIER</small></span></a>
     <nav class="main-nav" aria-label="القائمة الرئيسية">
       <a href="/#results">العقارات</a>
       ${site.__lots ? '<a href="/lots">ابحث عن قطعة</a>' : ''}
@@ -84,7 +86,7 @@ ${body}
 <footer class="site-footer">
   <div class="wrap footer-grid">
     <div>
-      <strong>${e(site.site_name)}</strong>
+      <div class="footer-brand"><img src="/static/logo-mark.svg" alt="" width="52" height="52" loading="lazy"><strong>${e(site.site_name)}</strong></div>
       <p>${e(site.site_tagline)}</p>
       ${site.office_address ? `<p>${e(site.office_address)}</p>` : ''}
       ${site.office_hours ? `<p>${e(site.office_hours)}</p>` : ''}

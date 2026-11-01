@@ -12,9 +12,10 @@ import { displayPhone, normalizePhone } from '../shared/phone.js';
 
 export const OG_W = 1200, OG_H = 630;
 const FONT = path.join(config.root, 'server', 'assets', 'fonts', 'Cairo-Bold.ttf');
-const LAYOUT_VERSION = '3'; // غيّره عند تعديل التصميم لتُولَّد الصور من جديد
+const LAYOUT_VERSION = '4'; // غيّره عند تعديل التصميم لتُولَّد الصور من جديد
 const cacheDir = () => path.join(config.dataDir, 'og-cache');
-const BRAND = '#0e5a4c', GOLD = '#f2c46d';
+const BRAND = '#1f9a34', GOLD = '#f2c46d'; // أخضر شعار «الوسيط العقاري»
+const MARK = path.join(config.root, 'public-static', 'logo-mark.svg');
 
 const markup = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 const clip = (s, n) => { const t = String(s || '').trim(); return t.length > n ? t.slice(0, n - 1).trim() + '…' : t; };
@@ -66,8 +67,14 @@ export async function renderOg(l, site, priceMain) {
   // شارة العملية أعلى الصورة
   const badgeText = await textImg(`${deal} · ${typeLabel}`, { size: 30, width: 600 });
   const bw = badgeText.w + 48, bh = badgeText.h + 16;
-  const badgeBg = Buffer.from(`<svg width="${bw}" height="${bh}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" rx="${bh / 2}" fill="${l.deal === 'rent' ? '#1d6fb8' : '#b5481f'}"/></svg>`);
+  const badgeBg = Buffer.from(`<svg width="${bw}" height="${bh}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" rx="${bh / 2}" fill="${l.deal === 'rent' ? '#1d6fb8' : '#d9702a'}"/></svg>`);
   layers.push({ input: badgeBg, top: 40, left: OG_W - pad - bw }, { input: badgeText.input, top: 48, left: OG_W - pad - bw + 24 });
+
+  // الشعار في دائرة بيضاء أعلى يسار الصورة
+  const logoSize = 132;
+  const mark = await sharp(MARK, { density: 200 }).resize(logoSize - 28, logoSize - 28).png().toBuffer();
+  const disc = Buffer.from(`<svg width="${logoSize}" height="${logoSize}" xmlns="http://www.w3.org/2000/svg"><circle cx="${logoSize / 2}" cy="${logoSize / 2}" r="${logoSize / 2 - 4}" fill="#fff" stroke="${BRAND}" stroke-width="6"/></svg>`);
+  layers.push({ input: disc, top: 28, left: 40 }, { input: mark, top: 28 + 14, left: 40 + 14 });
 
   return base.composite(layers).jpeg({ quality: 82, mozjpeg: true }).toBuffer();
 }

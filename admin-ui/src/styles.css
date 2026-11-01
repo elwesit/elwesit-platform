@@ -1,12 +1,12 @@
 :root {
-  --bg: #f6f4ef; --surface: #fff; --surface2: #fbfaf7; --ink: #1d2623; --muted: #5f6b66; --line: #e4dfd4;
-  --brand: #0e5a4c; --brand-soft: #e2efeb; --accent: #b57d21; --danger: #a33a2b; --ok: #1f7a4a; --wa: #128c4b;
-  --k-request: #2f5d8a; --k-offer: #0e5a4c; --k-appt: #7a4fa3; --k-task: #5b6470; --k-inbox: #b57d21; --k-match: #1f7a4a; --k-stale: #a35a1b; --k-money: #8a6d1f; --k-deal: #8a3b5c; --k-person: #3f5f6b;
+  --bg: #f5f8f5; --surface: #fff; --surface2: #f9fbf9; --ink: #1c2a20; --muted: #5b6760; --line: #dde6de;
+  --brand: #187f29; --brand-soft: #e5f4e7; --accent: #c46a1c; --danger: #a33a2b; --ok: #1f7a4a; --wa: #128c4b;
+  --k-request: #2f5d8a; --k-offer: #187f29; --k-appt: #7a4fa3; --k-task: #5b6470; --k-inbox: #b57d21; --k-match: #1f7a4a; --k-stale: #a35a1b; --k-money: #8a6d1f; --k-deal: #8a3b5c; --k-person: #3f5f6b;
   --radius: 12px; --font: "SF Arabic", "Noto Sans Arabic", "Segoe UI", "Geeza Pro", Tahoma, system-ui, sans-serif;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #121715; --surface: #1b2220; --surface2: #202826; --ink: #e6ece9; --muted: #9aa8a2; --line: #2e3835; --brand: #3fa58f; --brand-soft: #1e3530; --accent: #d9a34a; --danger: #e07a6a; --ok: #5cc28c; color-scheme: dark; }
+  :root { --bg: #121715; --surface: #1b2220; --surface2: #202826; --ink: #e6ece9; --muted: #9aa8a2; --line: #2e3835; --brand: #4cc75a; --brand-soft: #173a1f; --accent: #e8873f; --danger: #e07a6a; --ok: #5cc28c; color-scheme: dark; }
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
@@ -373,7 +373,7 @@ textarea { resize: vertical; }
 
 /* مخطط نواكشوط */
 .map-plan { height: calc(100vh - 230px); min-height: 360px; }
-.leaflet-tooltip.zone-label { background: transparent; border: 0; box-shadow: none; color: #0e5a4c; font-weight: 700; font-size: .8rem; text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
+.leaflet-tooltip.zone-label { background: transparent; border: 0; box-shadow: none; color: #187f29; font-weight: 700; font-size: .8rem; text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
 .leaflet-tooltip.zone-label::before { display: none; }
 .leaflet-tooltip.lot-label { padding: 0 5px; font-size: .74rem; font-weight: 600; direction: rtl; }
 .leaflet-tooltip.plan-label { background: rgba(255,255,255,.85); border: 0; box-shadow: none; color: #5a2d91; font-weight: 700; font-size: .72rem; }
@@ -411,6 +411,6 @@ textarea { resize: vertical; }
 .tbl td:not(:first-child), .tbl th:not(:first-child) { text-align: center; width: 64px; }
 .bars { display: flex; align-items: flex-end; gap: 2px; height: 120px; padding: 4px 0; direction: ltr; }
 .bar { flex: 1; height: 100%; display: flex; align-items: flex-end; min-width: 2px; }
-.bar span { display: block; width: 100%; background: var(--brand, #0e5a4c); border-radius: 3px 3px 0 0; min-height: 2px; }
+.bar span { display: block; width: 100%; background: var(--brand, #187f29); border-radius: 3px 3px 0 0; min-height: 2px; }
 .channel-seg { margin-bottom: 10px; }
 .og-preview { display: block; width: 100%; max-width: 600px; height: auto; border-radius: 8px; margin: 8px 0; border: 1px solid var(--line); }
