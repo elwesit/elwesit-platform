@@ -291,6 +291,17 @@
     }, true);
   }
 
+  // زر إيقاف شريط «طلب عاجل» وتشغيله
+  document.addEventListener('click', (ev) => {
+    const b = ev.target.closest && ev.target.closest('.urgent-pause');
+    if (!b) return;
+    const bar = b.closest('.urgent-bar');
+    const paused = bar.classList.toggle('paused');
+    b.setAttribute('aria-pressed', String(paused));
+    b.setAttribute('aria-label', paused ? 'تشغيل حركة الشريط' : 'إيقاف حركة الشريط');
+    b.title = paused ? 'تشغيل الحركة' : 'إيقاف الحركة';
+  });
+
   document.addEventListener('click', (ev) => {
     const a = ev.target.closest && ev.target.closest('a.wa-ask');
     if (!a || ev.defaultPrevented || ev.button || ev.metaKey || ev.ctrlKey || typeof HTMLDialogElement !== 'function') return;

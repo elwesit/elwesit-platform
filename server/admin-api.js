@@ -17,6 +17,7 @@ import { matchRequestProperty, rankMatches } from '../shared/matching.js';
 import { parseLocation, SHORT_LINK_HOSTS } from '../shared/geolink.js';
 import { normalizePhone } from '../shared/phone.js';
 import { DEFAULT_SETTINGS } from './defaults.js';
+import { cleanUrgent } from '../shared/urgent.js';
 import { statsSummary } from './stats.js';
 
 const wrap = (fn) => async (req, res, next) => { try { await fn(req, res, next); } catch (e) { next(e); } };
@@ -107,7 +108,8 @@ export function adminRouter() {
   r.put('/settings', (req, res) => {
     const allowed = Object.keys(DEFAULT_SETTINGS);
     const up = db().prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at');
-    const body = req.body || {};
+    const body = { ...(req.body || {}) };
+    if ('urgent_requests' in body) body.urgent_requests = cleanUrgent(body.urgent_requests);
     db().transaction(() => { for (const k of allowed) if (k in body) up.run(k, JSON.stringify(body[k]), now()); })();
     syncPublicSettings();
     audit(req.user.id, 'settings', 'settings', null, Object.keys(body).join(','));

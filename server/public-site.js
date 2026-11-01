@@ -6,11 +6,12 @@ import { publicReadDb } from './db.js';
 import { config } from './config.js';
 import { submitInbox } from './inbox-intake.js';
 import { isStaff, rateLimit, sameOrigin } from './auth.js';
-import { layout, card, waAsk, searchForm, inboxForm, priceText, featuresList, safeJson, icon } from './public-views.js';
+import { layout, card, waAsk, urgentHref, searchForm, inboxForm, priceText, featuresList, safeJson, icon } from './public-views.js';
 import { escapeHtml as e, norm, normLot, slugify } from '../shared/text.js';
 import { TYPES, DEALS_PUBLIC } from '../shared/vocab.js';
 import { formatNumber } from '../shared/money.js';
 import { normalizePhone } from '../shared/phone.js';
+import { activeUrgent } from '../shared/urgent.js';
 import { directionsLinks } from '../shared/geolink.js';
 import { lotPrecision, sidesText, planMatches } from '../shared/plans.js';
 import { measure } from '../shared/lotShapes.js';
@@ -326,6 +327,18 @@ ${filtered ? '' : areaLinks(areaCounts())}`;
     res.send(layout(s, { title: 'وصل طلبك', body: `<section class="wrap narrow page ok-page"><h1>✓ وصل طلبك</h1><p>رقم الإيصال: <strong dir="ltr">${e(String(req.query.r || '').slice(0, 20))}</strong></p><p>سنتواصل معك في أقرب وقت على الرقم الذي أدخلته.</p><p><a class="btn btn-primary" href="/">تصفح العقارات</a></p></section>` }));
   });
 
+  // كل الطلبات العاجلة في قائمة واحدة (لمن لا يريد الشريط المتحرك، ولمن يصل من رابطه)
+  r.get('/urgent', (req, res) => {
+    const s = site();
+    const wa = normalizePhone(s.contact_whatsapp || s.contact_phone || '');
+    const items = activeUrgent(s.urgent_requests);
+    const list = items.length
+      ? `<ul class="urgent-list">${items.map((x) => `<li><p>${e(x.text)}</p>${wa ? `<a class="btn btn-wa btn-sm" href="${e(urgentHref(x, s, wa))}" rel="noopener">${icon.wa}<span>عندي المطلوب، راسلنا</span></a>` : ''}</li>`).join('')}</ul>`
+      : '<div class="empty"><p>لا توجد طلبات عاجلة حالياً.</p></div>';
+    const body = `<section class="wrap narrow page"><h1>طلبات عاجلة</h1><p class="lead">زبائن يبحثون عن هذه العقارات الآن. إن كان عندك ما يناسب أحدها اضغط على «عندي المطلوب» لتراسلنا على واتساب برسالة جاهزة.</p>${list}<p class="hero-actions"><a class="btn btn-outline" href="/offer">اعرض عقارك</a><a class="btn btn-outline" href="/request">أبحث عن عقار</a></p></section>`;
+    res.send(layout(s, { title: 'طلبات عاجلة', description: 'طلبات عقارية عاجلة في نواكشوط: زبائن يبحثون عن قطع أرضية ومنازل وشقق الآن. عندك المطلوب؟ راسلنا على واتساب.', canonical: baseUrl(req, s) + '/urgent', body, staff: isStaff(req.user), noindex: !items.length }));
+  });
+
   r.get('/privacy', (req, res) => { const s = site(); res.send(layout(s, { title: 'الخصوصية', body: privacyPage(s) })); });
   r.get('/terms', (req, res) => { const s = site(); res.send(layout(s, { title: 'الشروط', body: termsPage(s) })); });
   r.get('/content-rights', (req, res) => { const s = site(); res.send(layout(s, { title: 'حقوق المحتوى', body: contentPage(s) })); });
@@ -389,7 +402,7 @@ ${filtered ? '' : areaLinks(areaCounts())}`;
   r.get('/sitemap.xml', (req, res) => {
     const s = site(); const b = baseUrl(req, s);
     const rows = publicReadDb().prepare('SELECT ref, updated_at FROM listings ORDER BY published_at DESC LIMIT 5000').all();
-    res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n<url><loc>${b}/</loc></url>\n<url><loc>${b}/request</loc></url>\n<url><loc>${b}/offer</loc></url>\n${s.__lots ? `<url><loc>${b}/lots</loc></url>\n` : ''}${areaSitemap(b)}${rows.map((r) => `<url><loc>${b}/p/${encodeURIComponent(r.ref)}</loc><lastmod>${r.updated_at.slice(0, 10)}</lastmod></url>`).join('\n')}\n</urlset>`);
+    res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n<url><loc>${b}/</loc></url>\n<url><loc>${b}/request</loc></url>\n<url><loc>${b}/offer</loc></url>\n${s.__lots ? `<url><loc>${b}/lots</loc></url>\n` : ''}${activeUrgent(s.urgent_requests).length ? `<url><loc>${b}/urgent</loc></url>\n` : ''}${areaSitemap(b)}${rows.map((r) => `<url><loc>${b}/p/${encodeURIComponent(r.ref)}</loc><lastmod>${r.updated_at.slice(0, 10)}</lastmod></url>`).join('\n')}\n</urlset>`);
   });
   // صفحة «غير موجودة» بالعربية بدل رسالة Express الافتراضية
   r.use((req, res, next) => {
