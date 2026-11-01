@@ -273,3 +273,38 @@ fieldset.inline label { display: flex; align-items: center; gap: 6px; min-height
 .area-links a { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; min-height: 40px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); text-decoration: none; color: var(--ink); }
 .area-links a:hover { border-color: var(--brand); color: var(--brand); }
 .area-links small { color: var(--muted); }
+
+/* ---------- شريط «طلب عاجل»: ثابت مع رأس الصفحة، يتحرك من اليسار إلى اليمين لتُقرأ بداية الجملة أولاً ---------- */
+.urgent-bar { display: flex; align-items: stretch; background: var(--brand-dark, #10601d); color: #fff; font-size: .92rem; line-height: 1.4; min-height: 40px; border-bottom: 2px solid var(--accent, #e8873f); }
+.urgent-label { flex: none; display: inline-flex; align-items: center; gap: 7px; padding: 0 14px; background: #e8873f; color: #1c1a17; font-weight: 800; text-decoration: none; white-space: nowrap; font-family: var(--font-brand, var(--font)); position: relative; z-index: 1; box-shadow: -6px 0 10px rgba(0, 0, 0, .18); }
+.urgent-dot { width: 9px; height: 9px; border-radius: 50%; background: #b3261e; box-shadow: 0 0 0 0 rgba(179, 38, 30, .6); animation: urgent-pulse 1.6s ease-out infinite; }
+.urgent-viewport { flex: 1; min-width: 0; overflow: hidden; display: flex; align-items: center; }
+.urgent-track { display: flex; flex: none; width: max-content; animation: urgent-scroll var(--urgent-dur, 40s) linear infinite; }
+.urgent-set { display: flex; flex: none; gap: 28px; padding-inline-end: 28px; }
+.urgent-item { display: inline-flex; align-items: center; gap: 8px; color: #fff; text-decoration: none; white-space: nowrap; padding: 6px 0; }
+.urgent-item svg { color: #7ee08a; }
+.urgent-item b { background: #fff; color: var(--brand, #187f29); border-radius: 999px; padding: 1px 10px; font-size: .8rem; }
+.urgent-item:hover span, .urgent-item:focus-visible span { text-decoration: underline; }
+.urgent-item:focus-visible, .urgent-label:focus-visible, .urgent-pause:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
+.urgent-viewport:hover .urgent-track, .urgent-track:focus-within, .urgent-bar.paused .urgent-track { animation-play-state: paused; }
+.urgent-pause { flex: none; width: 40px; border: 0; background: rgba(0, 0, 0, .18); color: #fff; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+.urgent-pause .i-play, .urgent-bar.paused .urgent-pause .i-pause { display: none; }
+.urgent-bar.paused .urgent-pause .i-play { display: inline; }
+@keyframes urgent-scroll { from { transform: translateX(0); } to { transform: translateX(50%); } }
+@keyframes urgent-pulse { 0% { box-shadow: 0 0 0 0 rgba(179, 38, 30, .6); } 70%, 100% { box-shadow: 0 0 0 7px rgba(179, 38, 30, 0); } }
+/* تقليل الحركة: لا حركة، والطلبات تُسحب باليد مرة واحدة دون تكرار */
+@media (prefers-reduced-motion: reduce) {
+  .urgent-track, .urgent-dot { animation: none; }
+  .urgent-viewport { overflow-x: auto; scrollbar-width: none; }
+  .urgent-dup, .urgent-copy, .urgent-pause { display: none; }
+  .urgent-set { padding-inline-start: 14px; }
+}
+@media (max-width: 640px) {
+  .urgent-bar { font-size: .86rem; min-height: 38px; }
+  .urgent-label { padding: 0 10px; }
+  .urgent-item b { display: none; }
+  .urgent-set { gap: 22px; padding-inline-end: 22px; }
+}
+.urgent-list { list-style: none; padding: 0; margin: 16px 0; display: grid; gap: 10px; }
+.urgent-list li { background: var(--surface); border: 1px solid var(--line); border-inline-start: 4px solid #e8873f; border-radius: var(--radius); padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; }
+.urgent-list p { margin: 0; font-weight: 700; }

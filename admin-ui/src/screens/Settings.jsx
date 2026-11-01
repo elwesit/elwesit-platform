@@ -14,8 +14,9 @@ export default function Settings({ route }) {
   useEffect(() => { loadSettings(); }, []);
   return <div className="page settings">
     <div className="page-head"><h1>الإعدادات</h1></div>
-    <Seg value={tab} onChange={setTab} options={[['site', 'الموقع والتواصل'], ['templates', 'القوالب'], ['areas', 'الأحياء'], ['plans', 'المخططات'], ['data', 'البيانات'], ['account', 'الحساب'], ['integrations', 'واتساب']]} />
+    <Seg value={tab} onChange={setTab} options={[['site', 'الموقع والتواصل'], ['urgent', 'طلبات عاجلة'], ['templates', 'القوالب'], ['areas', 'الأحياء'], ['plans', 'المخططات'], ['data', 'البيانات'], ['account', 'الحساب'], ['integrations', 'واتساب']]} />
     {tab === 'site' && (s.settings ? <SiteSettings settings={s.settings} /> : <p className="muted">الإعدادات تحتاج اتصالاً للتحميل.</p>)}
+    {tab === 'urgent' && (s.settings ? <UrgentRequests settings={s.settings} /> : <p className="muted">الإعدادات تحتاج اتصالاً للتحميل.</p>)}
     {tab === 'templates' && <Templates />}
     {tab === 'areas' && <Areas />}
     {tab === 'plans' && <Plans />}
@@ -70,6 +71,42 @@ function SiteSettings({ settings }) {
       <Field label="إضافة لصفحة الشروط"><TextArea value={v.terms_extra} onChange={set('terms_extra')} rows={3} /></Field>
     </Section>
     <div className="form-actions sticky"><Btn kind="primary" onClick={save}>حفظ الإعدادات</Btn></div>
+  </>;
+}
+
+// شريط «طلب عاجل» في أعلى كل صفحة من الموقع: يضغط عليه من عنده المطلوب فيراسلنا على واتساب
+function UrgentRequests({ settings }) {
+  const [list, setList] = useState(() => (settings.urgent_requests || []).map((r) => ({ ...r })));
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+  const today = new Date().toISOString().slice(0, 10);
+  const edit = (i, k) => (x) => setList(list.map((r, j) => (j === i ? { ...r, [k]: x } : r)));
+  const save = async (next = list) => {
+    setBusy(true);
+    const r = await saveSettings({ urgent_requests: next.filter((x) => String(x.text || '').trim()) });
+    setBusy(false);
+    if (r.ok) setList((r.data.settings.urgent_requests || []).map((x) => ({ ...x })));
+    toast(r.ok ? 'حُفظت الطلبات وظهرت في شريط الموقع' : r.data?.message || 'تعذر الحفظ — تحقق من الاتصال', r.ok ? 'info' : 'err');
+  };
+  const remove = (i) => { const next = list.filter((_, j) => j !== i); setList(next); save(next); };
+  const move = (i, d) => { const j = i + d; if (j < 0 || j >= list.length) return; const next = [...list]; [next[i], next[j]] = [next[j], next[i]]; setList(next); };
+  return <>
+    <Section title="شريط «طلب عاجل»" count={list.length} actions={<Btn small icon="plus" onClick={() => setList([{ id: 'u' + uuid().slice(0, 8), text: '', until: '' }, ...list])}>طلب</Btn>}>
+      <p className="hint">يظهر كل طلب في شريط متحرك أعلى كل صفحة من الموقع. من يضغط عليه يفتح واتساب برسالة جاهزة تذكر الطلب. اكتب الطلب قصيراً، مثلاً «مطلوب قطعة 300 م² في تفرغ زينة». تاريخ الانتهاء اختياري: بعده يختفي الطلب تلقائياً.</p>
+      {!list.length && <p className="muted">لا توجد طلبات. الشريط مخفي من الموقع حتى تضيف طلباً.</p>}
+      {list.map((r, i) => <div key={r.id} className="urgent-row">
+        <Field label={`الطلب ${i + 1}${r.src === 'repo' ? ' (نشره Claude)' : ''}${r.until && r.until < today ? ' — انتهى' : ''}`}><Input value={r.text} onChange={edit(i, 'text')} maxLength={160} placeholder="مطلوب قطعة 300 م² في تفرغ زينة" /></Field>
+        <div className="grid2">
+          <Field label="يختفي بعد (اختياري)"><Input type="date" value={r.until} onChange={edit(i, 'until')} dir="ltr" /></Field>
+          <div className="row-actions">
+            <Btn small onClick={() => move(i, -1)} disabled={!i} aria-label="نقل إلى الأعلى">↑</Btn>
+            <Btn small onClick={() => move(i, 1)} disabled={i === list.length - 1} aria-label="نقل إلى الأسفل">↓</Btn>
+            <Btn small kind="danger" icon="close" onClick={() => remove(i)}>حذف</Btn>
+          </div>
+        </div>
+      </div>)}
+    </Section>
+    <div className="form-actions sticky"><Btn kind="primary" onClick={() => save()} disabled={busy}>حفظ ونشر على الموقع</Btn>{settings.base_url && <LinkBtn href={settings.base_url.replace(/\/$/, '') + '/urgent'} target="_blank" rel="noopener">عرض على الموقع</LinkBtn>}</div>
   </>;
 }
 

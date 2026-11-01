@@ -28,6 +28,8 @@ export const DEFAULT_SETTINGS = {
   facebook_domain_verification: '',
   // حسابات الموقع على الشبكات (رابط في كل سطر)، تُعرض لمحركات البحث حتى تربطها باسم الموقع
   social_links: 'https://www.facebook.com/433987593121741\nhttps://www.tiktok.com/@telephone26463808',
+  // شريط «طلب عاجل» أعلى كل صفحة: [{id, text, until}] — يُعدَّل من الإعدادات أو من content/urgent-requests.json
+  urgent_requests: [],
 };
 
 export const DEFAULT_TEMPLATES = [
