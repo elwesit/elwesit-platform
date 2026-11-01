@@ -1,13 +1,15 @@
 // عروض تأتي مع الكود: مجلد لكل عرض في content/listings/<key>/ فيه listing.json وصوره (jpg/png/webp).
 // عند التشغيل يُنشأ كل عرض جديد ويُنشر مرة واحدة، فينشر Claude عروض المالك بطلب منه دون أي كلمة مرور.
-// المعرّف مشتق من اسم المجلد، فلا يتكرر العرض، وما يعدّله المالك أو يسحبه من لوحة الإدارة يبقى كما هو.
+// المعرّف مشتق من اسم المجلد، فلا يتكرر العرض. إذا تغيّر محتوى المجلد طُبّق التعديل مرة واحدة على
+// الحقول المذكورة فيه وعلى الصور؛ وما عدا ذلك مما يعدّله المالك أو يسحبه من لوحة الإدارة يبقى كما هو.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { config } from './config.js';
-import { createRow, updateRow } from './entities.js';
+import { db, now } from './db.js';
+import { createRow, updateRow, getRow } from './entities.js';
 import { storeUpload } from './media.js';
-import { publishProperty } from './publish.js';
+import { publishProperty, refreshIfPublished } from './publish.js';
 
 const PHOTO = /\.(jpe?g|png|webp)$/i;
 const MIME = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
@@ -28,17 +30,33 @@ export async function importRepoListings(dir = path.join(config.root, 'content',
     try {
       const id = listingId(key);
       const fields = JSON.parse(fs.readFileSync(spec, 'utf8'));
+      const photoFiles = fs.readdirSync(folder).filter((f) => PHOTO.test(f)).sort();
+      const h = crypto.createHash('sha256');
+      for (const f of ['listing.json', ...photoFiles]) h.update(f).update(fs.readFileSync(path.join(folder, f)));
+      const hash = h.digest('hex');
+      const seen = db().prepare('SELECT hash FROM repo_listings WHERE key = ?').get(key);
+      if (seen?.hash === hash) continue;
       const out = createRow('properties', { ...fields, id }, null);
-      if (out.existed) continue;
+      const remember = () => db().prepare('INSERT INTO repo_listings (key, hash, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET hash = excluded.hash, updated_at = excluded.updated_at').run(key, hash, now());
       const photos = [];
-      for (const [i, f] of fs.readdirSync(folder).filter((f) => PHOTO.test(f)).sort().entries()) {
+      for (const [i, f] of photoFiles.entries()) {
         const ext = f.split('.').pop().toLowerCase();
-        const file = await storeUpload({ buffer: fs.readFileSync(path.join(folder, f)), mimetype: MIME[ext], originalname: f, kind: 'photo', owner_type: 'property', owner_id: id, id: listingId(`${key}/${i}`) }, null);
+        const file = await storeUpload({ buffer: fs.readFileSync(path.join(folder, f)), mimetype: MIME[ext], originalname: f, kind: 'photo', owner_type: 'property', owner_id: id, id: listingId(`${key}/${hash.slice(0, 12)}/${i}`) }, null);
         photos.push(file.id);
+      }
+      if (out.existed) {
+        const cur = getRow('properties', id);
+        updateRow('properties', id, { ...fields, ...(photos.length ? { pub_photo_ids: photos } : {}) }, cur.version, null, { force: true });
+        await refreshIfPublished(id, null);
+        remember();
+        console.log('[repo-listings] عُدّل', key, cur.ref);
+        done.push({ key, id, ref: cur.ref, updated: true });
+        continue;
       }
       if (photos.length) updateRow('properties', id, { pub_photo_ids: photos }, out.row.version, null);
       const pub = await publishProperty(id, null);
       if (pub.problems) { console.error('[repo-listings]', key, pub.problems.join('، ')); continue; }
+      remember();
       console.log('[repo-listings] نُشر', key, out.row.ref);
       done.push({ key, id, ref: out.row.ref });
     } catch (e) {
