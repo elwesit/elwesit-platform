@@ -157,3 +157,34 @@ test('الصفحة الرئيسية: بيانات منظمة باسم الموق
   assert.equal(ld[1].telephone, '+22226463808');
   assert.ok(!(await client().req('GET', '/?deal=rent')).body.includes('ld+json'), 'نتائج البحث بلا بيانات الموقع');
 });
+
+test('SEO: عنوان الرئيسية بالاسمين والمدينة، صورة مشاركة افتراضية، سطر فرنسي، وضغط gzip', async () => {
+  const home = await client().req('GET', '/', undefined, { 'accept-encoding': 'gzip' });
+  assert.match(home.body, /<title>الوسيط العقاري \| ELWESITE IMMOBILIER — عقارات للبيع والإيجار في نواكشوط<\/title>/);
+  assert.match(home.body, /<h1><span class="hero-kicker">الوسيط العقاري · <span lang="fr">ELWESITE IMMOBILIER/);
+  assert.match(home.body, /<meta property="og:image" content="[^"]+\/static\/og\.png">/);
+  assert.match(home.body, /lang="fr" dir="ltr">Elwesite Immobilier — agence immobilière à Nouakchott/);
+  assert.equal(home.headers.get('content-encoding'), 'gzip');
+  const ld = JSON.parse(home.body.match(/<script type="application\/ld\+json">([^<]+)<\/script>/)[1]);
+  assert.ok(ld[1].alternateName.includes('ELWESITE IMMOBILIER'));
+  assert.ok(ld[1]['@id'].endsWith('/#agent'));
+  const privacy = (await client().req('GET', '/privacy')).body;
+  assert.match(privacy, /<link rel="canonical" href="[^"]+\/privacy">/);
+});
+
+test('SEO: صفحة العرض فيها بيانات العرض والبائع ومسار التنقل، ووصف يذكر الاسم', async () => {
+  await admin.req('POST', `/api/admin/properties/${listing.id}/publish`, {});
+  const page = (await client().req('GET', '/p/' + listing.ref)).body;
+  assert.match(page, /<meta name="description" content="للإيجار · [^"]*— الوسيط العقاري، نواكشوط/);
+  const ld = JSON.parse(page.match(/<script type="application\/ld\+json">([^<]+)<\/script>/)[1]);
+  const [lst, crumbs] = ld;
+  assert.equal(lst['@type'], 'RealEstateListing');
+  assert.equal(lst.provider['@id'].slice(-7), '/#agent');
+  assert.equal(lst.offers.priceCurrency, 'MRU');
+  assert.ok(lst.offers.businessFunction.endsWith('LeaseOut'));
+  assert.ok(lst.image.length >= 1, 'صورة حتى بدون صور العقار');
+  assert.equal(lst.contentLocation.address.addressCountry, 'MR');
+  assert.equal(crumbs['@type'], 'BreadcrumbList');
+  assert.equal(crumbs.itemListElement.length, 3);
+  assert.ok(crumbs.itemListElement[1].item.endsWith('/m/tevragh-zeina/rent'));
+});

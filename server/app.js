@@ -1,4 +1,5 @@
 import express from 'express';
+import compression from 'compression';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
@@ -18,6 +19,8 @@ export function createApp() {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', config.trustProxy ? 1 : false);
+  // ضغط الصفحات وملفات CSS/JS (gzip): الصفحة الرئيسية ~66 KB تصبح ~12 KB، أسرع على شبكات الجوال
+  app.use(compression());
 
   app.use((req, res, next) => {
     const tiles = tileOrigin();
