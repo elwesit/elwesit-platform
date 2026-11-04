@@ -34,8 +34,16 @@ export function verificationToken(v) {
   return /^[A-Za-z0-9_\-.=+/]{4,200}$/.test(t) ? t : '';
 }
 
+// الاسم اللاتيني كما في الشعار: يساعد من يبحث بالفرنسية أو بالحروف اللاتينية
+export const BRAND_LATIN = 'ELWESITE IMMOBILIER';
+export const BRAND_FR_LINE = 'Elwesite Immobilier — agence immobilière à Nouakchott : terrains, maisons et appartements à vendre et à louer.';
+
 export function layout(site, { title, description, canonical, ogImage, body, staff, head = '', bodyClass = '', noindex = false }) {
-  const t = title ? `${title} | ${site.site_name}` : `${site.site_name} — ${site.site_tagline}`;
+  // الرئيسية: الاسم العربي واللاتيني والمدينة في العنوان، لأن الناس يبحثون بها
+  const t = title ? `${title} | ${site.site_name}` : `${site.site_name} | ${BRAND_LATIN} — عقارات للبيع والإيجار في نواكشوط`;
+  // صورة مشاركة افتراضية (الشعار 1200×630) لكل صفحة ليس لها صورة خاصة
+  const origin = (() => { try { return new URL(canonical || site.base_url || config.baseUrl).origin; } catch { return ''; } })();
+  if (!ogImage && origin) ogImage = { url: `${origin}/static/og.png`, width: 1200, height: 630 };
   const wa = normalizePhone(site.contact_whatsapp || site.contact_phone || '');
   const tel = normalizePhone(site.contact_phone || '');
   return `<!doctype html>
@@ -48,16 +56,19 @@ export function layout(site, { title, description, canonical, ogImage, body, sta
 ${canonical ? `<link rel="canonical" href="${e(canonical)}">` : ''}
 <meta property="og:type" content="website">
 <meta property="og:locale" content="ar_AR">
+<meta property="og:locale:alternate" content="fr_FR">
 <meta property="og:site_name" content="${e(site.site_name)}">
-<meta property="og:title" content="${e(title || site.site_name)}">
+<meta property="og:title" content="${e(title || `${site.site_name} | ${BRAND_LATIN}`)}">
 <meta property="og:description" content="${e(description || site.site_tagline)}">
 ${canonical ? `<meta property="og:url" content="${e(canonical)}">` : ''}
 ${ogImage ? `<meta property="og:image" content="${e(typeof ogImage === 'string' ? ogImage : ogImage.url)}">${ogImage.width ? `<meta property="og:image:width" content="${ogImage.width}"><meta property="og:image:height" content="${ogImage.height}">` : ''}<meta name="twitter:card" content="summary_large_image">` : ''}
-<meta name="theme-color" content="#0e5a4c">
+<meta name="theme-color" content="#2cb33b">
 ${config.preview ? '<meta name="robots" content="noindex, nofollow">' : noindex ? '<meta name="robots" content="noindex, follow">' : ''}
 ${verificationToken(site.google_site_verification) ? `<meta name="google-site-verification" content="${e(verificationToken(site.google_site_verification))}">` : ''}
 ${verificationToken(site.facebook_domain_verification) ? `<meta name="facebook-domain-verification" content="${e(verificationToken(site.facebook_domain_verification))}">` : ''}
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/icon-180.png">
+<link rel="preload" href="/static/fonts/Cairo-Bold.ttf" as="font" type="font/ttf" crossorigin>
 <link rel="stylesheet" href="/static/public.css?v=${site.__v}">
 ${head}
 </head>
@@ -67,7 +78,7 @@ ${staff ? `<div class="staffbar"><span>أنت مسجّل كمدير. هذه هي
 <header class="site-header">
 ${urgentBar(site, wa)}
   <div class="wrap header-row">
-    <a class="brand" href="/"><img src="/static/icon.svg" alt="" width="34" height="34"><span><strong>${e(site.site_name)}</strong><small>${e(site.site_tagline)}</small></span></a>
+    <a class="brand" href="/" title="${e(site.site_tagline)}"><img src="/static/logo-mark.svg" alt="" width="46" height="46"><span><strong>${e(site.site_name)}</strong><small lang="fr"><b>E</b>LWESITE IMMOBILIER</small></span></a>
     <nav class="main-nav" aria-label="القائمة الرئيسية">
       <a href="/#results">العقارات</a>
       ${site.__lots ? '<a href="/lots">ابحث عن قطعة</a>' : ''}
@@ -86,8 +97,9 @@ ${body}
 <footer class="site-footer">
   <div class="wrap footer-grid">
     <div>
-      <strong>${e(site.site_name)}</strong>
+      <div class="footer-brand"><img src="/static/logo-mark.svg" alt="" width="52" height="52" loading="lazy"><strong>${e(site.site_name)}</strong></div>
       <p>${e(site.site_tagline)}</p>
+      <p class="footer-fr" lang="fr" dir="ltr">${e(BRAND_FR_LINE)}</p>
       ${site.office_address ? `<p>${e(site.office_address)}</p>` : ''}
       ${site.office_hours ? `<p>${e(site.office_hours)}</p>` : ''}
     </div>
@@ -179,12 +191,19 @@ export function searchForm(geo, q, { compact = false } = {}) {
   const opt = (v, label, cur) => `<option value="${e(v)}"${String(cur || '') === String(v) ? ' selected' : ''}>${e(label)}</option>`;
   const locOptions = geo.wilayas.map((w) => `<optgroup label="${e(w.name_ar)}">${opt('w:' + w.code, 'كل ' + w.name_ar, q.loc)}${geo.moughataas.filter((m) => m.wilaya_code === w.code).map((m) => opt('m:' + m.code, m.name_ar, q.loc)).join('')}</optgroup>`).join('');
   const more = q.area_min || q.bedrooms || q.q;
+  // على الهاتف تُطوى حقول البحث خلف زر «فلترة» حتى تظهر العروض من أول شاشة (بلا جافاسكربت: مربع اختيار مخفي)
+  const filtered = q.type || q.loc || q.max || more;
   return `<form class="search${compact ? ' compact' : ''}" action="/" method="get" role="search" id="search-form">
+  <input type="checkbox" class="sf-toggle" id="sf-toggle"${filtered ? ' checked' : ''} hidden>
+  <div class="sf-top">
   <div class="seg" role="radiogroup" aria-label="نوع العملية">
     <label><input type="radio" name="deal" value=""${!q.deal ? ' checked' : ''}><span>الكل</span></label>
     <label><input type="radio" name="deal" value="sale"${q.deal === 'sale' ? ' checked' : ''}><span>للبيع</span></label>
     <label><input type="radio" name="deal" value="rent"${q.deal === 'rent' ? ' checked' : ''}><span>للإيجار</span></label>
   </div>
+  <label class="btn btn-outline sf-btn" for="sf-toggle" aria-controls="sf-body" role="button" tabindex="0"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg><span>فلترة</span></label>
+  </div>
+  <div class="sf-body" id="sf-body">
   <div class="fields">
     <label class="f"><span>نوع العقار</span><select name="type">${opt('', 'كل الأنواع', q.type)}${Object.entries(TYPES).map(([k, v]) => opt(k, v, q.type)).join('')}</select></label>
     <label class="f"><span>الموقع</span><select name="loc">${opt('', 'كل موريتانيا', q.loc)}${locOptions}</select></label>
@@ -199,6 +218,7 @@ export function searchForm(geo, q, { compact = false } = {}) {
   </details>
   <input type="hidden" name="view" value="${e(q.view || 'list')}">
   <button class="btn btn-primary" type="submit">ابحث</button>
+  </div>
 </form>`;
 }
 

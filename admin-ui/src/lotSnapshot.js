@@ -62,7 +62,7 @@ export async function lotSnapshot(hit) {
   g.font = 'bold 15px system-ui, sans-serif'; g.textAlign = 'center'; g.fillText('N', W - 46, 66);
 
   // الشريط السفلي
-  g.fillStyle = '#0e5a4c'; g.fillRect(0, H - BAR, W, BAR);
+  g.fillStyle = '#187f29'; g.fillRect(0, H - BAR, W, BAR);
   g.fillStyle = '#fff'; g.direction = 'rtl'; g.textAlign = 'right'; g.textBaseline = 'alphabetic';
   g.font = 'bold 34px system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif';
   // كل جزء يُرسم وحده من اليمين، كي لا يخلط اتجاه النص العربي واللاتيني ترتيب الأجزاء

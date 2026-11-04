@@ -61,7 +61,7 @@ function Shell() {
 
   return <div className={`app ${wide ? 'is-wide' : 'is-narrow'}`}>
     {wide && <aside className="sidebar">
-      <a className="side-brand" href={href('today')}><img src="/static/icon.svg" alt="" width="32" /><span>{s.settings?.site_name || 'الوسيط'}</span></a>
+      <a className="side-brand" href={href('today')}><img src="/static/logo-mark.svg" alt="" width="36" /><span>{s.settings?.site_name || 'الوسيط'}</span></a>
       <button className="btn btn-primary btn-block quick-add" onClick={() => go('capture')}><Icon name="plus" /><span>إضافة سريعة</span></button>
       <nav aria-label="الأقسام">{NAV.map(([k, label, icon]) => <a key={k} href={href(k)} className={section === k ? 'on' : ''} aria-current={section === k ? 'page' : undefined}><Icon name={icon} /><span>{label}</span>{k === 'inbox' && newInbox > 0 && <b className="count">{newInbox}</b>}</a>)}</nav>
       <a className="side-public" href="/" target="_blank" rel="noopener"><Icon name="globe" /><span>الموقع العام</span></a>

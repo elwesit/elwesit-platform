@@ -6,7 +6,7 @@ import { publicReadDb } from './db.js';
 import { config } from './config.js';
 import { submitInbox } from './inbox-intake.js';
 import { isStaff, rateLimit, sameOrigin } from './auth.js';
-import { layout, card, waAsk, urgentHref, searchForm, inboxForm, priceText, featuresList, safeJson, icon } from './public-views.js';
+import { layout, BRAND_LATIN, card, waAsk, urgentHref, searchForm, inboxForm, priceText, featuresList, safeJson, icon } from './public-views.js';
 import { escapeHtml as e, norm, normLot, slugify } from '../shared/text.js';
 import { TYPES, DEALS_PUBLIC } from '../shared/vocab.js';
 import { formatNumber } from '../shared/money.js';
@@ -69,15 +69,48 @@ function homeDescription(s) {
 }
 
 // بيانات منظمة: اسم الموقع وأسماؤه البديلة (فيظهر عند البحث عن «الوسيط»)، ونشاطه وحساباته على الشبكات
+// المعرّف الثابت للوكالة: تشير إليه صفحات العروض كبائع، فيربط Google كل العروض بالاسم نفسه
+const agentId = (home) => home + '#agent';
 function siteJsonLd(s, home) {
   const sameAs = String(s.social_links || '').split(/\s+/).filter((u) => /^https:\/\/[^\s"<>]+$/.test(u));
   const tel = normalizePhone(s.contact_whatsapp || s.contact_phone || '');
+  const names = ['الوسيط', BRAND_LATIN, 'Elwesite Immobilier', 'Elwesit', 'elwesit.com'];
   const data = [
-    { '@context': 'https://schema.org', '@type': 'WebSite', name: s.site_name, alternateName: ['الوسيط', 'Elwesit', 'elwesit.com'], url: home, inLanguage: 'ar' },
-    { '@context': 'https://schema.org', '@type': 'RealEstateAgent', name: s.site_name, alternateName: 'الوسيط', url: home, logo: home + 'static/og.png', image: home + 'static/og.png',
-      ...(tel ? { telephone: '+' + tel } : {}), areaServed: { '@type': 'City', name: 'نواكشوط' }, address: { '@type': 'PostalAddress', addressLocality: 'Nouakchott', addressCountry: 'MR' }, ...(sameAs.length ? { sameAs } : {}) },
+    { '@context': 'https://schema.org', '@type': 'WebSite', '@id': home + '#website', name: s.site_name, alternateName: names, url: home, inLanguage: ['ar', 'fr'], publisher: { '@id': agentId(home) } },
+    { '@context': 'https://schema.org', '@type': 'RealEstateAgent', '@id': agentId(home), name: s.site_name, alternateName: names, url: home, logo: home + 'static/logo.png', image: home + 'static/og.png',
+      description: homeDescription(s), knowsLanguage: ['ar', 'fr'],
+      ...(tel ? { telephone: '+' + tel, contactPoint: { '@type': 'ContactPoint', telephone: '+' + tel, contactType: 'customer service', areaServed: 'MR', availableLanguage: ['Arabic', 'French'] } } : {}),
+      ...(s.contact_email ? { email: s.contact_email } : {}),
+      areaServed: { '@type': 'City', name: 'Nouakchott', alternateName: 'نواكشوط' },
+      address: { '@type': 'PostalAddress', ...(s.office_address ? { streetAddress: s.office_address } : {}), addressLocality: 'Nouakchott', addressCountry: 'MR' },
+      ...(sameAs.length ? { sameAs } : {}) },
   ];
-  return `<script type="application/ld+json">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>`;
+  return ldScript(data);
+}
+
+const ldScript = (data) => `<script type="application/ld+json">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>`;
+
+// بيانات منظمة لصفحة العرض: العرض نفسه (السعر، المكان، الصور، البائع) ومسار التنقل
+function listingJsonLd(l, { b, url, s, photos, area, ogUrl, metaDesc }) {
+  const home = b + '/';
+  const images = photos.slice(0, 3).map((ph) => `${b}/media/${encodeURIComponent(l.ref)}/${ph.key}.webp`);
+  const place = { '@type': 'Place', name: l.place_label || undefined,
+    address: { '@type': 'PostalAddress', ...(area ? { addressLocality: area.name_ar, addressRegion: area.wilaya || undefined } : {}), addressCountry: 'MR' } };
+  // الإحداثيات فقط للموقع المحدد؛ الموقع التقريبي لا يُعلن كأنه دقيق
+  if (l.loc_mode === 'exact' && l.lat != null) place.geo = { '@type': 'GeoCoordinates', latitude: l.lat, longitude: l.lng };
+  const listing = { '@context': 'https://schema.org', '@type': 'RealEstateListing', '@id': url + '#listing', name: l.title, url, inLanguage: 'ar',
+    description: l.description || metaDesc, datePosted: l.published_at, dateModified: l.updated_at, image: images.length ? images : [ogUrl],
+    contentLocation: place, provider: { '@type': 'RealEstateAgent', '@id': home + '#agent', name: s.site_name, url: home } };
+  if (!l.price_hidden && l.price_amount != null) {
+    listing.offers = { '@type': 'Offer', price: l.price_currency === 'MRO' ? l.price_amount / 10 : l.price_amount, priceCurrency: 'MRU',
+      businessFunction: l.deal === 'rent' ? 'http://purl.org/goodrelations/v1#LeaseOut' : 'http://purl.org/goodrelations/v1#Sell',
+      availability: 'https://schema.org/InStock', seller: { '@id': home + '#agent' } };
+  }
+  const crumbs = [{ name: 'العقارات', item: home }];
+  if (area) crumbs.push({ name: DEAL_PATH[l.deal] ? `${DEAL_PATH[l.deal]} في ${area.name_ar}` : area.name_ar, item: b + areaUrl(area, DEAL_PATH[l.deal] ? l.deal : '') });
+  crumbs.push({ name: l.title, item: url });
+  const breadcrumb = { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: crumbs.map((c, i) => ({ '@type': 'ListItem', position: i + 1, ...c })) };
+  return [listing, breadcrumb];
 }
 
 function baseUrl(req, s) {
@@ -147,7 +180,7 @@ export function publicRouter() {
     const qs = new URLSearchParams(Object.entries(q).filter(([k, v]) => typeof v === 'string' && v && k !== 'cursor')).toString();
     const body = `
 <section class="hero"><div class="wrap">
-  <h1>${e(s.site_tagline || 'عقارات في موريتانيا')}</h1>
+  <h1><span class="hero-kicker">${e(s.site_name)} · <span lang="fr">${BRAND_LATIN}</span></span>${e(s.site_tagline || 'عقارات في موريتانيا')}</h1>
   <p class="lead">${e(s.site_intro || '')}</p>
   ${searchForm(geo(), q)}
   <div class="hero-actions">${s.__lots ? '<a class="btn btn-outline" href="/lots">ابحث عن قطعة برقمها</a>' : ''}<a class="btn btn-outline" href="/request">لم تجد ما تريد؟ أرسل طلبك</a><a class="btn btn-outline" href="/offer">اعرض عقارك</a></div>
@@ -202,8 +235,10 @@ ${filtered ? '' : areaLinks(areaCounts())}`;
       ['رقم القطعة', l.lot_number || null], ['المخطط', l.plan || null], ['القطاع', l.sector || null],
       ['الغرف', l.bedrooms], ['الحمامات', l.bathrooms], ['الطوابق', l.floors], ['معلم قريب', l.landmark || null], ['المرجع', l.ref],
     ].filter(([, v]) => v != null && v !== '');
-    const jsonld = { '@context': 'https://schema.org', '@type': 'RealEstateListing', name: l.title, url, datePosted: l.published_at, description: l.description || undefined, image: photos.slice(0, 3).map((ph) => `${baseUrl(req, s)}/media/${encodeURIComponent(l.ref)}/${ph.key}.webp`) };
-    if (!l.price_hidden && l.price_amount != null) jsonld.offers = { '@type': 'Offer', price: l.price_currency === 'MRO' ? l.price_amount / 10 : l.price_amount, priceCurrency: 'MRU' };
+    const b = baseUrl(req, s);
+    const ogUrl = `${b}/og/${encodeURIComponent(l.ref)}.jpg?v=${ogKey(l, s)}`;
+    const metaDesc = [DEALS_PUBLIC[l.deal], l.place_label, l.area_m2 ? `${formatNumber(l.area_m2)} م²` : '', p.main].filter(Boolean).join(' · ') + ` — ${s.site_name}، نواكشوط. تواصل عبر واتساب.`;
+    const jsonld = listingJsonLd(l, { b, url, s, photos, area, ogUrl, metaDesc });
     const body = `
 <article class="wrap property" data-ref="${e(l.ref)}">
   <nav class="crumbs"><a href="/">العقارات</a> ‹ ${area ? `<a href="${areaUrl(area, l.deal)}">${e(DEAL_PATH[l.deal] ? `${DEAL_PATH[l.deal]} في ${area.name_ar}` : area.name_ar)}</a> ‹ ` : ''}<span>${e(l.ref)}</span></nav>
@@ -241,8 +276,8 @@ ${filtered ? '' : areaLinks(areaCounts())}`;
     </aside>
   </div>
 </article>
-<script type="application/ld+json">${JSON.stringify(jsonld).replace(/</g, '\\u003c')}</script>`;
-    res.send(layout(s, { title: l.title, description: [DEALS_PUBLIC[l.deal], l.place_label, l.area_m2 ? `${formatNumber(l.area_m2)} م²` : '', p.main].filter(Boolean).join(' · '), canonical: url, ogImage: { url: `${baseUrl(req, s)}/og/${encodeURIComponent(l.ref)}.jpg?v=${ogKey(l, s)}`, width: OG_W, height: OG_H }, body, staff: isStaff(req.user), head: mapHead(s) }));
+${ldScript(jsonld)}`;
+    res.send(layout(s, { title: l.title, description: metaDesc, canonical: url, ogImage: { url: ogUrl, width: OG_W, height: OG_H }, body, staff: isStaff(req.user), head: mapHead(s) }));
   });
 
   // صورة المشاركة: تُخدم فقط ما دام العرض منشوراً
@@ -339,9 +374,9 @@ ${filtered ? '' : areaLinks(areaCounts())}`;
     res.send(layout(s, { title: 'طلبات عاجلة', description: 'طلبات عقارية عاجلة في نواكشوط: زبائن يبحثون عن قطع أرضية ومنازل وشقق الآن. عندك المطلوب؟ راسلنا على واتساب.', canonical: baseUrl(req, s) + '/urgent', body, staff: isStaff(req.user), noindex: !items.length }));
   });
 
-  r.get('/privacy', (req, res) => { const s = site(); res.send(layout(s, { title: 'الخصوصية', body: privacyPage(s) })); });
-  r.get('/terms', (req, res) => { const s = site(); res.send(layout(s, { title: 'الشروط', body: termsPage(s) })); });
-  r.get('/content-rights', (req, res) => { const s = site(); res.send(layout(s, { title: 'حقوق المحتوى', body: contentPage(s) })); });
+  r.get('/privacy', (req, res) => { const s = site(); res.send(layout(s, { title: 'الخصوصية', canonical: baseUrl(req, s) + '/privacy', body: privacyPage(s) })); });
+  r.get('/terms', (req, res) => { const s = site(); res.send(layout(s, { title: 'الشروط', canonical: baseUrl(req, s) + '/terms', body: termsPage(s) })); });
+  r.get('/content-rights', (req, res) => { const s = site(); res.send(layout(s, { title: 'حقوق المحتوى', canonical: baseUrl(req, s) + '/content-rights', body: contentPage(s) })); });
 
   // ---------- البحث عن قطعة في مخططات التجزئة التي أتاحها المدير ----------
   // الزائر يسأل عن قطعة واحدة في مخطط واحد، فيأخذ رقمها وحدودها فقط: لا صورة مخطط ولا قائمة قطع.
@@ -402,7 +437,8 @@ ${filtered ? '' : areaLinks(areaCounts())}`;
   r.get('/sitemap.xml', (req, res) => {
     const s = site(); const b = baseUrl(req, s);
     const rows = publicReadDb().prepare('SELECT ref, updated_at FROM listings ORDER BY published_at DESC LIMIT 5000').all();
-    res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n<url><loc>${b}/</loc></url>\n<url><loc>${b}/request</loc></url>\n<url><loc>${b}/offer</loc></url>\n${s.__lots ? `<url><loc>${b}/lots</loc></url>\n` : ''}${activeUrgent(s.urgent_requests).length ? `<url><loc>${b}/urgent</loc></url>\n` : ''}${areaSitemap(b)}${rows.map((r) => `<url><loc>${b}/p/${encodeURIComponent(r.ref)}</loc><lastmod>${r.updated_at.slice(0, 10)}</lastmod></url>`).join('\n')}\n</urlset>`);
+    const latest = rows.reduce((m, r) => (r.updated_at > m ? r.updated_at : m), '');
+    res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n<url><loc>${b}/</loc>${latest ? `<lastmod>${latest.slice(0, 10)}</lastmod>` : ''}</url>\n<url><loc>${b}/request</loc></url>\n<url><loc>${b}/offer</loc></url>\n${s.__lots ? `<url><loc>${b}/lots</loc></url>\n` : ''}${activeUrgent(s.urgent_requests).length ? `<url><loc>${b}/urgent</loc></url>\n` : ''}${areaSitemap(b)}${rows.map((r) => `<url><loc>${b}/p/${encodeURIComponent(r.ref)}</loc><lastmod>${r.updated_at.slice(0, 10)}</lastmod></url>`).join('\n')}\n</urlset>`);
   });
   // صفحة «غير موجودة» بالعربية بدل رسالة Express الافتراضية
   r.use((req, res, next) => {
