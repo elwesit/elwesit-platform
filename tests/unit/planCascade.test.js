@@ -57,3 +57,14 @@ test('اسم المنطقة يُقبل في البحث بالنص', () => {
   const r = searchPlanLots(plans, '57 سوكوجيم', { moughataas, areas });
   assert.deepEqual(r.hits.map((h) => h.plan.id), ['p2']);
 });
+
+test('العرض المكتوب «سكتير 4» يُربط بمخطط EXT F NORD SECTEUR 4 لا بقطاع 14', async () => {
+  const { listingOnPlan } = await import('../../shared/plans.js');
+  const p4 = { lotissement: 'EXT F NORD SECTEUR 4' };
+  assert.equal(listingOnPlan(p4, 'سكتير 4'), true);
+  assert.equal(listingOnPlan(p4, '', '4'), true);
+  assert.equal(listingOnPlan(p4, 'قطاع 4'), true);
+  assert.equal(listingOnPlan(p4, 'سكتير 14'), false);
+  assert.equal(listingOnPlan(p4, 'المنارة'), false);
+  assert.equal(listingOnPlan(p4, ''), false);
+});

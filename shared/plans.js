@@ -85,7 +85,7 @@ export const shapeText = (sh) => (sh ? `${sh.area.toLocaleString('ar-u-nu-latn')
 
 // «57 المنارة»، «F9 561»، «قطعة 561 قطاع 9 تفرغ زينة»: رقم القطعة + كلمات المخطط أو المنطقة
 const LOT_WORD = /^(قطعة|القطعة|قطعه|رقم|نمرة|نمره|النمرة|lot|n°|no)$/i;
-const NAME_WORD = /^(قطاع|القطاع|سكتور|secteur|sect|sector|مخطط|module|phase|tranche|ilot|ilôt|zone|extension|ext)$/i;
+const NAME_WORD = /^(قطاع|القطاع|سكتور|سكتير|السكتير|سيكتور|secteur|sect|sector|مخطط|module|phase|tranche|ilot|ilôt|zone|extension|ext)$/i;
 const LOT_TOKEN = /^(?:n°?|no\.?|#)?\d{1,5}[a-z]{0,3}$/i; // 561، 15A، N627
 export function parseLotQuery(q) {
   const toks = toLatinDigits(String(q || '')).trim().split(/[\s,،;/]+/).filter(Boolean);
@@ -102,7 +102,7 @@ export function parseLotQuery(q) {
 
 // كل كلمة من «rest» موجودة في اسم المخطط أو تجزئته أو مقاطعته
 // كلمات عربية تقابل ما يُكتب بالفرنسية في أسماء ملفات المخططات
-const SYN = { قطاع: ['sect', 'secteur', 'sector', 'سكتور'], سكتور: ['sect', 'secteur', 'قطاع'], توسعه: ['ext', 'extension'], شمال: ['nord'], جنوب: ['sud'], شرق: ['est'], غرب: ['ouest'], منطقه: ['zone'], مقاطعه: [] };
+const SYN = { قطاع: ['sect', 'secteur', 'sector', 'سكتور', 'سكتير'], سكتور: ['sect', 'secteur', 'قطاع'], سكتير: ['sect', 'secteur', 'sector', 'قطاع'], سيكتور: ['sect', 'secteur', 'قطاع'], توسعه: ['ext', 'extension'], شمال: ['nord'], جنوب: ['sud'], شرق: ['est'], غرب: ['ouest'], منطقه: ['zone'], مقاطعه: [] };
 const FILLER = new Set(['مخطط', 'في', 'من', 'حي', 'plan', 'lotissement', 'de', 'du', 'la', 'le']);
 export function planNameHit(plan, rest, moughataas = [], areas = []) {
   const words = norm(rest).split(' ').filter((w) => w && !LOT_WORD.test(w) && !FILLER.has(w));
@@ -167,4 +167,11 @@ export function lotPrecision(hit) {
   if (g === 'geopdf') return { level: 'label', label: 'موضع الرقم فقط', text: 'هذا موضع رقم القطعة على المخطط. لم نستخرج حدودها من الملف، فالموقع داخل القطعة تقريباً وليس حدوداً مؤكدة.' };
   if (g === 'points') return { level: 'approx', label: 'تقريبي', text: 'المخطط مضبوط يدوياً بنقطتين، فالموقع تقريبي وقد ينحرف أمتاراً. تحقق بالمعاينة.' };
   return { level: 'approx', label: 'تقريبي', text: 'مصدر إحداثيات هذا المخطط غير معروف، فالموقع تقريبي.' };
+}
+
+// هل العرض على هذا المخطط؟ نص «المخطط» و«القطاع» في العرض كما يكتبه الوسيط («سكتير 4»، «المنارة»)
+export function listingOnPlan(plan, planText, sector = '') {
+  const t = [planText, sector && !String(planText || '').includes(sector) ? `قطاع ${sector}` : ''].filter(Boolean).join(' ').trim();
+  if (!t) return false;
+  return planMatches(plan, planText) || planNameHit(plan, t);
 }

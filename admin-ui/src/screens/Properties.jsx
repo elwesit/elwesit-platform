@@ -4,7 +4,7 @@ import { lotSnapshot } from '../lotSnapshot.js';
 import { fieldsFor, cleanupFor } from '@shared/typeFields.js';
 import { Btn, Field, Input, NumInput, Select, Seg, Chips, Toggle, TextArea, Sheet, Section, Empty, KindTag, Pending, Icon, LinkBtn, useToast, Confirm } from '../ui.jsx';
 import { Missing, PersonPicker, GeoFields, PriceFields, NextStep, ContactActions, Timeline, Photos, InfoRow, SplitLayout, useSettings, compressImage, loadLeaflet, tileLayer, pinIcon, zonesLayer, zoneNames, attachPlans } from '../components.jsx';
-import { findPlanLots, planLabel, hitTag, hitPlanCount, shapeText, searchPlanLots, parseLotQuery, planCascade, lotsInPlan, lotPrecision, planMatches } from '@shared/plans.js';
+import { findPlanLots, planLabel, hitTag, hitPlanCount, shapeText, searchPlanLots, parseLotQuery, planCascade, lotsInPlan, lotPrecision, listingOnPlan } from '@shared/plans.js';
 import { zoneAt, lotLabel, NKC_ZONES } from '@shared/nouakchottZones.js';
 import MapPicker from '../MapPicker.jsx';
 import { TYPES, DEALS, AVAILABILITY, FEATURES, SENT_RESPONSE } from '@shared/vocab.js';
@@ -571,7 +571,7 @@ function PlanMap({ initialQ }) {
     setMsg(notes.filter(Boolean).join(' ') || null);
   };
   // العروض المسجلة على القطعة المعروضة: الرقم نفسه في المخطط نفسه، أو قريبة منها على الخريطة
-  const lotProps = lotInfo ? live.filter((p) => p.lot_norm && p.lot_norm === normLot(lotInfo.h.lot) && (planMatches(lotInfo.h.plan, p.plan) || (p.lat != null && Math.abs(p.lat - lotInfo.h.lat) < 0.0006 && Math.abs(p.lng - lotInfo.h.lng) < 0.0006))) : [];
+  const lotProps = lotInfo ? live.filter((p) => p.lot_norm && p.lot_norm === normLot(lotInfo.h.lot) && (listingOnPlan(lotInfo.h.plan, p.plan, p.sector) || (p.lat != null && Math.abs(p.lat - lotInfo.h.lat) < 0.0006 && Math.abs(p.lng - lotInfo.h.lng) < 0.0006))) : [];
   // فتح الشاشة من البحث الموحد بقطعة محددة
   const ran = React.useRef(false);
   useEffect(() => {
