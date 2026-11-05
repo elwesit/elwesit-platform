@@ -30,6 +30,7 @@ async function waitSaved(page) { await expect(page.locator('.sync-label').first(
 test('زائر يرسل طلباً ← يظهر في الوارد واليوم ← يُحوَّل إلى عميل وطلب', async ({ page, browser }) => {
   const name = 'زائر ' + rnd();
   const visitor = await browser.newContext(ANON);
+  await visitor.route('https://wa.me/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<p>whatsapp</p>' })); // بعد الحفظ يُفتح واتساب في لسان جديد
   const v = await visitor.newPage();
   await v.goto('/request');
   await v.getByLabel('إيجار').check();
@@ -58,6 +59,7 @@ test('زائر يرسل طلباً ← يظهر في الوارد واليوم �
 test('إعادة إرسال نموذج بعد انقطاع لا تكرر الطلب', async ({ page, browser }) => {
   const name = 'مكرر ' + rnd();
   const visitor = await browser.newContext(ANON);
+  await visitor.route('https://wa.me/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<p>whatsapp</p>' })); // بعد الحفظ يُفتح واتساب في لسان جديد
   const v = await visitor.newPage();
   await v.goto('/contact');
   await v.getByLabel('الاسم').fill(name);
@@ -716,4 +718,31 @@ test('استفسر عبر واتساب: من بطاقة العرض ← حفظ ا
   const rt = new URL(href).searchParams.get('text');
   for (const s of [name, title, row.ref, '450 م²', '2.5 مليون أوقية جديدة (25 مليون أوقية قديمة)', `/p/${row.ref}`]) expect(rt).toContain(s);
   await page.screenshot({ path: `tests/e2e-report/wa-inquiry-admin-${test.info().project.name}.png`, fullPage: true });
+});
+
+test('نموذج «أبحث عن عقار» يحفظ الطلب ثم يفتح واتساب برسالة فيها محتواه', async ({ page, browser }) => {
+  await login(page);
+  const { settings } = await api(page).get('/settings');
+  if (!settings.contact_whatsapp) await page.request.put('/api/admin/settings', { data: { contact_whatsapp: '26463808' }, headers: { 'x-wasit': '1' } });
+  const ourWa = '222' + (settings.contact_whatsapp || '26463808').replace(/\D/g, '').slice(-8);
+  const visitor = await browser.newContext(ANON);
+  const waUrls = [];
+  await visitor.route('https://wa.me/**', (r) => { waUrls.push(r.request().url()); r.fulfill({ status: 200, contentType: 'text/html', body: '<p>whatsapp</p>' }); });
+  const v = await visitor.newPage();
+  await v.goto('/request');
+  const name = 'باحث ' + rnd();
+  await v.getByLabel('إيجار').check();
+  await v.getByLabel('نوع العقار').selectOption('apartment');
+  await v.getByLabel('المكان المطلوب').fill('تفرغ زينة');
+  await v.getByLabel('الاسم').fill(name);
+  await v.getByLabel(/رقم الهاتف/).fill('46 77 88 99');
+  await v.getByRole('button', { name: 'أرسل طلبي' }).click();
+  await expect.poll(() => waUrls.length, { timeout: 15000 }).toBeGreaterThan(0);
+  const u = new URL(waUrls[0]);
+  expect(u.pathname).toBe('/' + ourWa);
+  const text = u.searchParams.get('text');
+  for (const s of ['السلام عليكم، أبحث عن عقار عبر موقع', '• أبحث عن: إيجار', '• نوع العقار: شقة', '• المكان المطلوب: تفرغ زينة', `• الاسم: ${name}`, '• رقم الطلب: ']) expect(text).toContain(s);
+  await visitor.close();
+  const { data } = await api(page).get('/sync?since=');
+  expect(data.inbox.filter((m) => m.name === name)).toHaveLength(1); // الطلب محفوظ أيضاً
 });

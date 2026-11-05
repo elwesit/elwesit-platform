@@ -6,7 +6,7 @@ import { publicReadDb } from './db.js';
 import { config } from './config.js';
 import { submitInbox } from './inbox-intake.js';
 import { isStaff, rateLimit, sameOrigin } from './auth.js';
-import { layout, BRAND_LATIN, card, waAsk, urgentHref, searchForm, inboxForm, priceText, featuresList, safeJson, icon } from './public-views.js';
+import { layout, BRAND_LATIN, card, waAsk, listingWaText, urgentHref, searchForm, inboxForm, priceText, featuresList, safeJson, icon } from './public-views.js';
 import { escapeHtml as e, norm, normLot, slugify } from '../shared/text.js';
 import { TYPES, DEALS_PUBLIC } from '../shared/vocab.js';
 import { formatNumber } from '../shared/money.js';
@@ -270,8 +270,8 @@ ${filtered ? '' : areaLinks(areaCounts())}`;
           ${waAsk(l, askCtx(req, s), 'btn-block')}
           <button class="btn btn-outline btn-block share-btn" type="button" data-url="${e(url)}?src=share" data-title="${e(l.title)}">${icon.share}<span>مشاركة الرابط</span></button>
         </div>
-        <h3>أو اترك رقمك ونتصل بك</h3>
-        ${inboxForm('interest', { token: crypto.randomUUID(), site: s, property: l })}
+        <h3>أو اكتب استفسارك هنا</h3>
+        ${inboxForm('interest', { token: crypto.randomUUID(), site: s, property: l, wa: askCtx(req, s).wa, waText: listingWaText(l, askCtx(req, s)) })}
       </div>
     </aside>
   </div>
@@ -333,7 +333,7 @@ ${ldScript(jsonld)}`;
 
   const formPage = (kind, title, intro) => (req, res) => {
     const s = site();
-    const body = `<section class="wrap narrow page"><h1>${title}</h1><p class="lead">${intro}</p>${inboxForm(kind, { token: crypto.randomUUID(), site: s })}</section>`;
+    const body = `<section class="wrap narrow page"><h1>${title}</h1><p class="lead">${intro}</p>${inboxForm(kind, { token: crypto.randomUUID(), site: s, wa: askCtx(req, s).wa })}</section>`;
     res.send(layout(s, { title, description: intro, canonical: baseUrl(req, s) + req.path, body, staff: isStaff(req.user) }));
   };
   r.get('/request', formPage('search', 'أبحث عن عقار', 'أخبرنا بما تبحث عنه، وسنتواصل معك بالعروض المناسبة. يكفي رقم هاتفك ووصف بسيط.'));
