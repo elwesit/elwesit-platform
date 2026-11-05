@@ -13,7 +13,7 @@ import { formatNumber } from '../shared/money.js';
 import { normalizePhone } from '../shared/phone.js';
 import { activeUrgent } from '../shared/urgent.js';
 import { directionsLinks } from '../shared/geolink.js';
-import { lotPrecision, sidesText, planMatches } from '../shared/plans.js';
+import { lotPrecision, sidesText, listingOnPlan } from '../shared/plans.js';
 import { measure } from '../shared/lotShapes.js';
 import { elevationAt } from './geo/elevation.js';
 import { recordHit, isBot } from './stats.js';
@@ -425,8 +425,8 @@ ${ldScript(jsonld)}`;
       return { lot: r.lot, lat: r.lat, lng: r.lng, shape, sides_text: shape ? sidesText(shape.sides) : '', status: r.status_label, elevation: el.length ? Math.round(el[Math.floor(el.length / 2)] * 2) / 2 : null, precision: lotPrecision({ plan: { georef: plan.georef }, shape }) };
     });
     // العروض المنشورة على هذه القطعة (إن أظهر المدير رقم قطعتها)
-    const listings = hits.length ? publicReadDb().prepare("SELECT ref, title, lot_number, plan FROM listings WHERE lot_number != '' AND plan != ''").all()
-      .filter((l) => normLot(l.lot_number) === n && planMatches({ lotissement: plan.label }, l.plan)).map((l) => ({ ref: l.ref, title: l.title, url: `/p/${encodeURIComponent(l.ref)}` })) : [];
+    const listings = hits.length ? publicReadDb().prepare("SELECT ref, title, lot_number, plan, sector FROM listings WHERE lot_number != '' AND (plan != '' OR sector != '')").all()
+      .filter((l) => normLot(l.lot_number) === n && listingOnPlan({ lotissement: plan.label }, l.plan, l.sector)).map((l) => ({ ref: l.ref, title: l.title, url: `/p/${encodeURIComponent(l.ref)}` })) : [];
     const s = site();
     res.json({ plan: { id: plan.plan_id, label: plan.label, area: plan.area_name, verified: !!plan.verified, lots: plan.lots_count }, lot: String(req.query.lot).trim(), hits, listings, wa: normalizePhone(s.contact_whatsapp || s.contact_phone || '') || null });
   });
