@@ -149,6 +149,40 @@
       if (el.type === 'radio') el.checked = el.value === data[el.name]; else el.value = data[el.name];
     }
   }
+  // رسالة واتساب بمحتوى النموذج: كل خانة معبأة سطر «• العنوان: القيمة»، والفارغ لا يظهر
+  const WA_INTRO = { search: 'أبحث عن عقار', offer: 'أعرض عقاري', contact: 'أتواصل معكم' };
+  function formWaText(f, receipt) {
+    const name = f.elements.name?.value.trim();
+    if (f.dataset.waText) {
+      const q = f.elements.message?.value.trim();
+      return f.dataset.waText + (q ? `\n• استفساري: ${q}` : '') + (name ? `\n• الاسم: ${name}` : '');
+    }
+    const lines = [`السلام عليكم، ${WA_INTRO[f.dataset.kind] || 'أتواصل معكم'} عبر موقع ${f.dataset.site || 'الوسيط العقاري'}:`];
+    const seen = new Set();
+    for (const el of f.elements) {
+      if (!el.name || seen.has(el.name) || ['hidden', 'file', 'submit', 'button'].includes(el.type) || ['website', 'contact_pref'].includes(el.name)) continue;
+      let label, value;
+      if (el.type === 'radio') {
+        seen.add(el.name);
+        const on = f.querySelector(`input[name="${el.name}"]:checked`);
+        if (!on) continue;
+        label = el.closest('fieldset')?.querySelector('legend')?.textContent; value = on.parentElement.textContent;
+      } else {
+        label = el.closest('label')?.querySelector('span')?.textContent;
+        value = el.tagName === 'SELECT' ? (el.value ? el.selectedOptions[0].textContent : '') : el.value;
+      }
+      label = (label || '').replace('*', '').trim(); value = String(value || '').trim();
+      if (label && value) lines.push(`• ${label}: ${value}`);
+    }
+    if (receipt) lines.push(`• رقم الطلب: ${receipt}`);
+    return lines.join('\n');
+  }
+  function waLinkAfter(f, status, url, label) {
+    let a = $('.form-wa', f);
+    if (!a) { a = document.createElement('a'); a.className = 'btn btn-wa btn-block form-wa'; a.rel = 'noopener'; a.target = '_blank'; status.after(a); }
+    a.href = url; a.textContent = label;
+  }
+
   $$('form.inbox-form').forEach((f) => {
     restoreDraft(f);
     f.addEventListener('input', () => saveDraft(f));
@@ -172,12 +206,16 @@
         if (!r.ok || !j.ok) throw new Error(j.message || 'تعذر الإرسال');
         try { localStorage.removeItem(draftKey(f)); } catch {}
         f.querySelectorAll('input:not([type=hidden]), textarea, select, button').forEach((x) => (x.disabled = true));
-        setStatus('ok', `✓ وصل طلبك (رقم الإيصال ${j.receipt}). سنتواصل معك قريباً.${j.photos_failed ? ` تعذر استلام ${j.photos_failed} صورة؛ يمكنك إرسالها عبر واتساب.` : ''}`);
+        const wa = f.dataset.wa ? `https://wa.me/${f.dataset.wa}?text=${encodeURIComponent(formWaText(f, j.receipt))}` : '';
+        setStatus('ok', `✓ وصل طلبك (رقم الإيصال ${j.receipt}).${wa ? ' يُفتح واتساب الآن برسالة طلبك؛ اضغط «إرسال» لتصلنا مباشرة.' : ' سنتواصل معك قريباً.'}${j.photos_failed ? ` تعذر استلام ${j.photos_failed} صورة؛ يمكنك إرسالها عبر واتساب.` : ''}`);
         status.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        if (wa) { waLinkAfter(f, status, wa, 'افتح واتساب'); openWhatsApp(wa); }
       } catch (e) {
         btn.disabled = false;
         const offline = !navigator.onLine || e instanceof TypeError;
         setStatus('err', offline ? 'لا يوجد اتصال بالإنترنت. معلوماتك محفوظة على هذا الجهاز؛ اضغط «إرسال» مجدداً عند عودة الاتصال، ولن يتكرر الطلب.' : `${e.message}. معلوماتك ما زالت هنا؛ يمكنك إعادة المحاولة.`);
+        // تعذر الحفظ: يبقى إرسال الطلب نفسه عبر واتساب ممكناً
+        if (f.dataset.wa) waLinkAfter(f, status, `https://wa.me/${f.dataset.wa}?text=${encodeURIComponent(formWaText(f))}`, 'أرسل طلبك عبر واتساب مباشرة');
       }
     });
   });
@@ -192,8 +230,7 @@
   let dlg = null;
 
   function openWhatsApp(url) {
-    // على الهاتف ينتقل الرابط إلى تطبيق واتساب؛ على الحاسوب نفتحه في لسان جديد ونبقي الموقع
-    if (matchMedia('(pointer: coarse)').matches) { location.href = url; return; }
+    // نفتحه في لسان جديد ونبقي الموقع ورسالة التأكيد؛ إن منعه المتصفح (مثل Safari بعد الانتظار) ننتقل إليه مباشرة
     const w = window.open(url, '_blank');
     if (w) w.opener = null; else location.href = url;
   }

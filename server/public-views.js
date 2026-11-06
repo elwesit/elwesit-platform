@@ -153,9 +153,11 @@ export function priceLine(l) {
 }
 
 // زر «استفسر عبر واتساب»: بدون جافاسكربت يفتح واتساب مباشرة، ومعها يطلب الاسم والرقم ويحفظ الاستفسار أولاً
+export const listingWaText = (l, { base = '', siteName }) => inquiryMessage(listingFacts(l, { url: `${base}/p/${encodeURIComponent(l.ref)}`, price: priceLine(l) }), '', siteName);
+
 export function waAsk(l, { base = '', siteName, wa }, cls = '') {
   if (!wa) return '';
-  const text = inquiryMessage(listingFacts(l, { url: `${base}/p/${encodeURIComponent(l.ref)}`, price: priceLine(l) }), '', siteName);
+  const text = listingWaText(l, { base, siteName });
   return `<a class="btn btn-wa wa-ask ${cls}" href="https://wa.me/${wa}?text=${encodeURIComponent(text)}" rel="noopener" data-wa="${e(wa)}" data-ref="${e(l.ref)}" data-title="${e(l.title)}" data-text="${e(text)}">${icon.wa}<span>استفسر عبر واتساب</span></a>`;
 }
 
@@ -222,7 +224,8 @@ export function searchForm(geo, q, { compact = false } = {}) {
 </form>`;
 }
 
-export function inboxForm(kind, { token, site, property, prefill = {} }) {
+// wa: رقم واتساب العمل؛ بعد الحفظ يُفتح واتساب برسالة فيها محتوى النموذج (waText: نص العقار لنموذج الاهتمام)
+export function inboxForm(kind, { token, site, property, prefill = {}, wa = '', waText = '' }) {
   const common = `<input type="hidden" name="kind" value="${kind}"><input type="hidden" name="client_token" value="${e(token)}">
   <div class="hp" aria-hidden="true"><label>اترك هذا الحقل فارغاً<input name="website" tabindex="-1" autocomplete="off"></label></div>`;
   const nameF = `<label class="f"><span>الاسم</span><input name="name" autocomplete="name" maxlength="120" value="${e(prefill.name || '')}"></label>`;
@@ -249,11 +252,12 @@ export function inboxForm(kind, { token, site, property, prefill = {} }) {
     <label class="f"><span>رسالتك (اختياري)</span><textarea name="message" rows="2" maxlength="1000" placeholder="مثلاً: أريد المعاينة يوم السبت"></textarea></label>
     ${contactPref}`;
   if (kind === 'contact') fields = `${nameF}${phoneF}<label class="f"><span>رسالتك <b class="req">*</b></span><textarea name="message" rows="3" maxlength="2000" required></textarea></label>${contactPref}`;
-  const btn = { search: 'أرسل طلبي', offer: 'أرسل العرض', interest: 'أنا مهتم، تواصلوا معي', contact: 'أرسل' }[kind];
-  return `<form class="inbox-form" method="post" action="/submit" enctype="multipart/form-data" data-kind="${kind}" novalidate>
+  const btn = { search: 'أرسل طلبي', offer: 'أرسل العرض', interest: 'أرسل استفساري', contact: 'أرسل' }[kind];
+  const waAttrs = wa ? ` data-wa="${e(wa)}" data-site="${e(site?.site_name || '')}"${waText ? ` data-wa-text="${e(waText)}"` : ''}` : '';
+  return `<form class="inbox-form" method="post" action="/submit" enctype="multipart/form-data" data-kind="${kind}"${waAttrs} novalidate>
   ${common}
   ${fields}
-  <p class="hint">نستخدم بياناتك للتواصل معك بخصوص طلبك فقط. <a href="/privacy">الخصوصية</a></p>
+  <p class="hint">${wa ? 'بعد الإرسال يُفتح واتساب برسالة طلبك جاهزة؛ اضغط «إرسال» لتصلنا مباشرة. ' : ''}نستخدم بياناتك للتواصل معك بخصوص طلبك فقط. <a href="/privacy">الخصوصية</a></p>
   <div class="form-status" role="status" aria-live="polite"></div>
   <button class="btn btn-primary btn-block" type="submit">${btn}</button>
 </form>`;
