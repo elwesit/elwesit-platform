@@ -35,7 +35,7 @@ export function createApp() {
         "style-src 'self' 'unsafe-inline'",
         `img-src 'self' data: blob: ${tiles} https://tile.openstreetmap.org https://server.arcgisonline.com`,
         "media-src 'self' blob:",
-        "connect-src 'self'",
+        "connect-src 'self' https://metadata.maptiles.arcgis.com",
         "font-src 'self'",
         "object-src 'none'",
         "base-uri 'self'",

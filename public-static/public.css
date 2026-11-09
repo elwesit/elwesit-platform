@@ -272,7 +272,15 @@ fieldset.inline label { display: flex; align-items: center; gap: 6px; min-height
 .tag.prec-plan { background: #efe7f8; color: #4a2a7a; }
 .tag.prec-label, .tag.prec-approx { background: #fbf0d6; color: #7a5a00; }
 .lot-side span { display: inline-block; transform: translate(-50%, -50%); background: rgba(255,255,255,.94); border: 1px solid #7a4ab8; color: #4a2a7a; border-radius: 6px; padding: 0 5px; font-size: 12px; font-weight: 700; white-space: nowrap; }
-.lot-side { background: none; border: none; }
+.lot-side, .lot-num { background: none; border: none; }
+.lot-side.on-sat span { background: rgba(17,17,17,.78); border-color: #ffd400; color: #fff; }
+.lot-num span { display: inline-block; transform: translate(-50%, -50%); font-weight: 800; font-size: 14px; color: #4a2a7a; text-shadow: 0 0 3px #fff, 0 0 3px #fff; white-space: nowrap; }
+.lot-num.on-sat span { color: #ffd400; text-shadow: 0 0 3px #000, 0 0 3px #000; }
+/* مبدّل الطبقات (قمر صناعي / شوارع / أسماء / تضاريس) */
+.leaflet-control-layers { font: inherit; font-size: 14px; border-radius: 10px; }
+.leaflet-control-layers-expanded { padding: 8px 12px; direction: rtl; text-align: right; }
+.leaflet-control-layers label { display: flex; align-items: center; gap: 6px; min-height: 32px; }
+.tiles-relief { mix-blend-mode: multiply; }
 
 /* صفحات المقاطعات وروابطها */
 .area-page { padding-top: 20px; padding-bottom: 32px; }
