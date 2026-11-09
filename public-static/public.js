@@ -34,11 +34,31 @@
     });
     return leafletP;
   }
-  function baseMap(el, center, zoom) {
+  // طبقات الخريطة: «قمر صناعي» (Esri World Imagery، أحدث صور متاحة) أو «شوارع»، مع «أسماء الأماكن» و«التضاريس» فوقها.
+  // يُحفظ اختيار الزائر في متصفحه فقط، والصفحة تعمل بدونه.
+  const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
+  const ESRI_ATTR = 'صور: Esri, Maxar, Earthstar Geographics';
+  const pref = { get(k) { try { return localStorage.getItem('wasit-map-' + k); } catch { return null; } }, set(k, v) { try { localStorage.setItem('wasit-map-' + k, v); } catch {} } };
+  function baseMap(el, center, zoom, opts = {}) {
     const L = window.L;
-    const m = L.map(el, { scrollWheelZoom: false, tap: true }).setView(center || mapCfg.center || [18.0858, -15.9785], zoom || mapCfg.zoom || 12);
-    L.tileLayer(mapCfg.tiles || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: mapCfg.maxZoom || 19, attribution: mapCfg.attribution || '&copy; OpenStreetMap' }).addTo(m);
+    const m = L.map(el, { scrollWheelZoom: false, tap: true, maxZoom: 20 }).setView(center || mapCfg.center || [18.0858, -15.9785], zoom || mapCfg.zoom || 12);
+    const streets = L.tileLayer(mapCfg.tiles || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxNativeZoom: mapCfg.maxZoom || 19, maxZoom: 20, attribution: mapCfg.attribution || '&copy; OpenStreetMap' });
+    const sat = L.tileLayer(ESRI + 'World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 19, maxZoom: 20, attribution: ESRI_ATTR, className: 'tiles-sat' });
+    const names = L.tileLayer(ESRI + 'Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 19, maxZoom: 20, pane: 'overlayPane', attribution: '' });
+    const relief = L.tileLayer(ESRI + 'Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 16, maxZoom: 20, opacity: 0.45, className: 'tiles-relief', attribution: 'تضاريس: Esri' });
+    const bases = { 'قمر صناعي': sat, 'شوارع': streets };
+    const saved = pref.get('base');
+    const first = saved === 'streets' ? streets : saved === 'sat' ? sat : (opts.satellite ? sat : streets);
+    first.addTo(m);
+    if (first === sat && pref.get('names') !== '0') names.addTo(m);
+    if (pref.get('relief') === '1') relief.addTo(m);
+    const ctl = L.control.layers(bases, { 'أسماء الأماكن': names, 'التضاريس': relief }, { position: 'topleft', collapsed: true }).addTo(m);
+    const tg = ctl.getContainer().querySelector('.leaflet-control-layers-toggle');
+    if (tg) { tg.title = 'طبقات الخريطة'; tg.setAttribute('aria-label', 'طبقات الخريطة'); }
+    m.on('baselayerchange', (e) => { pref.set('base', e.layer === sat ? 'sat' : 'streets'); m.fire('wasit:base', { satellite: e.layer === sat }); });
+    m.on('overlayadd overlayremove', (e) => { const on = e.type === 'overlayadd' ? '1' : '0'; if (e.layer === names) pref.set('names', on); if (e.layer === relief) pref.set('relief', on); });
     m.attributionControl.setPrefix(false);
+    m.wasitSatellite = () => m.hasLayer(sat);
     return m;
   }
   window.wasitMap = { loadLeaflet, baseMap };

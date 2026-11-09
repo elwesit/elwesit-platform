@@ -612,6 +612,10 @@ test('إضافة مخطط PDF من الهاتف: الممسوح يُضبط بن�
   expect(pp).toMatchObject({ m: 'TVZ', area: `حي ${tag}`, verified: true, lots: 12 });
   const fileReqs = [];
   v.on('request', (r) => { if (/\/api\/admin\/|\/files\//.test(r.url())) fileReqs.push(r.url()); });
+  // صور Esri الفضائية وتاريخها: بدائل محلية في الاختبار (لا شبكة خارجية)
+  const satTiles = [], png = await sharp({ create: { width: 256, height: 256, channels: 3, background: '#c9a46b' } }).png().toBuffer();
+  await v.route('https://server.arcgisonline.com/**', (r) => { satTiles.push(r.request().url()); return r.fulfill({ contentType: 'image/png', body: png }); });
+  await v.route('https://metadata.maptiles.arcgis.com/**', (r) => r.fulfill({ contentType: 'application/json', body: JSON.stringify({ results: [{ attributes: { SRC_DATE2: Date.UTC(2024, 2, 15), SRC_RES: 0.5 } }] }) }));
   await v.goto('/lots');
   const lf = v.locator('#lot-form');
   await lf.getByLabel('المقاطعة', { exact: true }).selectOption('TVZ');
@@ -628,6 +632,17 @@ test('إضافة مخطط PDF من الهاتف: الممسوح يُضبط بن�
   expect((await v.locator('path.leaflet-interactive').boundingBox()).width).toBeGreaterThan(40); // الحدود مرسومة فعلاً
   await expect(v.locator('img.leaflet-image-layer')).toHaveCount(0); // لا صورة مخطط
   expect(fileReqs).toEqual([]);
+  // الصورة الفضائية تحت القطعة افتراضياً، وتاريخها في البطاقة، والتبديل إلى «شوارع» يعيد الرسم
+  expect(satTiles.some((u) => u.includes('/World_Imagery/'))).toBe(true);
+  await expect(v.locator('.lot-num')).toHaveText('9104');
+  await expect(v.locator('path.leaflet-interactive')).toHaveAttribute('stroke', '#ffd400');
+  await expect(lc.locator('#sat-date')).toHaveText(/مارس 2024 · دقتها نحو 0.5 م/);
+  const streetsOpt = v.locator('.leaflet-control-layers label', { hasText: 'شوارع' });
+  await v.getByRole('button', { name: 'طبقات الخريطة' }).dispatchEvent('click'); // يفتح المبدّل (كما بالمرور أو اللمس)
+  await expect(streetsOpt).toBeVisible();
+  await streetsOpt.locator('input').dispatchEvent('click'); // رأس الصفحة الثابت قد يغطي أعلى الخريطة في نافذة الاختبار
+  await expect(v.locator('path.leaflet-interactive')).toHaveAttribute('stroke', '#7a4ab8');
+  await expect(v.locator('.lot-side')).toHaveCount(4);
   await expect(v).toHaveURL(/\/lots\?plan=.+&lot=9104/);
   // رقم غير موجود
   await lf.getByLabel('رقم القطعة').fill('9999');

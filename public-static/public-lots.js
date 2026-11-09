@@ -36,7 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // خيار واحد فقط: يُختار تلقائياً فلا يحتاج الزائر إلى لمسة إضافية على الهاتف
     if (list.length === 1 && selM.value) selP.value = list[0].id;
   }
-  const clear = () => { card.hidden = true; card.innerHTML = ''; layer?.clearLayers(); say('', ''); };
+  const clear = () => { card.hidden = true; card.innerHTML = ''; layer?.clearLayers(); last = null; say('', ''); };
   selM.addEventListener('change', () => { fillA(); fillP(); clear(); });
   selA.addEventListener('change', () => { fillP(); clear(); });
   selP.addEventListener('change', () => { clear(); if (inLot.value.trim() && selP.value) find(); });
@@ -45,8 +45,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (map) return;
     $('#lot-map').hidden = false;
     const L = await window.wasitMap.loadLeaflet();
-    map = window.wasitMap.baseMap($('#lot-map'));
+    // صورة فضائية تحت القطعة افتراضياً، ويمكن للزائر التبديل إلى «شوارع»
+    map = window.wasitMap.baseMap($('#lot-map'), null, null, { satellite: true });
     layer = L.layerGroup().addTo(map);
+    map.on('wasit:base', () => last && draw(last.j, last.i, false));
   }
 
   async function find() {
@@ -68,22 +70,47 @@ document.addEventListener('DOMContentLoaded', () => {
     show(j, 0);
   }
 
-  function show(j, i) {
-    const L = window.L, h = j.hits[i], pr = h.precision;
+  // رسم القطعة: على الصورة الفضائية خط أصفر بحاشية داكنة يُقرأ فوق الرمل والأسطح، وعلى «شوارع» البنفسجي المعتاد
+  let last = null;
+  function draw(j, i, fit) {
+    const L = window.L, h = j.hits[i], pr = h.precision, sat = map.wasitSatellite();
+    last = { j, i };
     layer.clearLayers();
+    const label = (ll, html, cls) => L.marker(ll, { interactive: false, icon: L.divIcon({ className: cls, html, iconSize: null }) }).addTo(layer);
     if (h.shape && pr.level === 'plan') {
-      L.polygon(h.shape.poly, { color: '#7a4ab8', weight: 3, fillOpacity: 0.18 }).addTo(layer);
-      h.shape.poly.forEach((p, k) => {
-        const q = h.shape.poly[(k + 1) % h.shape.poly.length];
+      const poly = h.shape.poly;
+      if (sat) L.polygon(poly, { color: '#111', weight: 6, opacity: 0.55, fill: false, interactive: false }).addTo(layer);
+      L.polygon(poly, sat ? { color: '#ffd400', weight: 3, fillColor: '#ffd400', fillOpacity: 0.12 } : { color: '#7a4ab8', weight: 3, fillOpacity: 0.18 }).addTo(layer);
+      poly.forEach((p, k) => {
+        const q = poly[(k + 1) % poly.length];
         if (h.shape.sides[k] < 2) return;
-        L.marker([(p[0] + q[0]) / 2, (p[1] + q[1]) / 2], { interactive: false, icon: L.divIcon({ className: 'lot-side', html: `<span>${num(h.shape.sides[k])} م</span>`, iconSize: null }) }).addTo(layer);
+        label([(p[0] + q[0]) / 2, (p[1] + q[1]) / 2], `<span>${num(h.shape.sides[k])} م</span>`, 'lot-side' + (sat ? ' on-sat' : ''));
       });
-      map.fitBounds(L.latLngBounds(h.shape.poly).pad(0.8), { maxZoom: 19 });
+      label(L.latLngBounds(poly).getCenter(), `<span>${esc(h.lot)}</span>`, 'lot-num' + (sat ? ' on-sat' : ''));
+      if (fit) map.fitBounds(L.latLngBounds(poly).pad(0.8), { maxZoom: 19 });
     } else {
       // موقع غير مؤكد: دائرة متقطعة لا حدود
-      L.circle([h.lat, h.lng], { radius: 20, color: '#b8860b', weight: 2, dashArray: '5 4', fillOpacity: 0.1 }).addTo(layer);
-      map.setView([h.lat, h.lng], 18);
+      L.circle([h.lat, h.lng], { radius: 20, color: sat ? '#ffd400' : '#b8860b', weight: 2, dashArray: '5 4', fillOpacity: 0.1 }).addTo(layer);
+      if (fit) map.setView([h.lat, h.lng], 18);
     }
+  }
+
+  // تاريخ الصورة الفضائية في موضع القطعة (خدمة بيانات Esri المجانية). إن تعذّر لا يظهر شيء.
+  const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+  async function imageryDate(lat, lng) {
+    const d = 0.002, u = new URLSearchParams({ geometry: `${lng},${lat}`, geometryType: 'esriGeometryPoint', sr: '4326', layers: 'all', tolerance: '1', mapExtent: `${lng - d},${lat - d},${lng + d},${lat + d}`, imageDisplay: '400,400,96', returnGeometry: 'false', f: 'json' });
+    const r = await fetch('https://metadata.maptiles.arcgis.com/arcgis/rest/services/World_Imagery_Metadata/MapServer/identify?' + u, { referrerPolicy: 'no-referrer', credentials: 'omit' });
+    const a = (await r.json()).results?.map((x) => x.attributes || {}).find((x) => x.SRC_DATE2 || x.SRC_DATE);
+    if (!a) return null;
+    const t = a.SRC_DATE2 ? new Date(+a.SRC_DATE2) : new Date(String(a.SRC_DATE).replace(/^(\d{4})(\d{2})(\d{2}).*/, '$1-$2-$3'));
+    if (isNaN(t)) return null;
+    const res = parseFloat(a.SRC_RES);
+    return `${MONTHS[t.getUTCMonth()]} ${t.getUTCFullYear()}${res > 0 && res < 30 ? ` · دقتها نحو ${num(res)} م` : ''}`;
+  }
+
+  function show(j, i) {
+    const h = j.hits[i], pr = h.precision;
+    draw(j, i, true);
     const others = j.hits.length > 1 ? `<p class="lot-pick">${j.hits.map((x, k) => `<button type="button" class="btn btn-sm ${k === i ? 'btn-primary' : 'btn-outline'}" data-k="${k}">موضع ${k + 1}</button>`).join(' ')}</p>` : '';
     const wa = j.wa ? `https://wa.me/${j.wa}?text=${encodeURIComponent(`السلام عليكم، أستفسر عن القطعة ${h.lot} في مخطط ${j.plan.label}${j.plan.area ? ' (' + j.plan.area + ')' : ''}.\n${location.href}`)}` : '';
     card.innerHTML = `${others}
@@ -97,9 +124,11 @@ document.addEventListener('DOMContentLoaded', () => {
       </ul>
       ${j.listings.length ? `<p><b>معروضة لدينا:</b> ${j.listings.map((l) => `<a href="${esc(l.url)}">${esc(l.title)}</a>`).join('، ')}</p>` : ''}
       <div class="lot-actions">${wa ? `<a class="btn btn-wa" href="${esc(wa)}" rel="noopener">استفسر عن هذه القطعة عبر واتساب</a>` : ''}<a class="btn btn-outline" href="https://www.google.com/maps/dir/?api=1&destination=${h.lat},${h.lng}" rel="noopener" target="_blank">الاتجاهات</a></div>
-      <p class="hint">الأضلاع والمساحة محسوبة من خطوط المخطط، والارتفاع من نموذج Copernicus (دقته بضعة أمتار). للاسترشاد فقط.</p>`;
+      <p class="hint">الأضلاع والمساحة محسوبة من خطوط المخطط، والارتفاع من نموذج Copernicus (دقته بضعة أمتار). للاسترشاد فقط.</p>
+      <p class="hint" id="sat-date" hidden></p>`;
     card.hidden = false;
     card.querySelectorAll('[data-k]').forEach((b) => b.addEventListener('click', () => show(j, +b.dataset.k)));
+    imageryDate(h.lat, h.lng).then((t) => { const el = $('#sat-date'); if (t && el && last?.j === j && last.i === i) { el.textContent = `تاريخ الصورة الفضائية في هذا الموضع: ${t}. قد لا تظهر فيها مبانٍ أحدث منها.`; el.hidden = false; } }).catch(() => {});
     setTimeout(() => map.invalidateSize(), 50);
     $('#lot-map').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
